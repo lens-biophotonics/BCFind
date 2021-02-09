@@ -1,0 +1,26 @@
+Dataset:
+    basepath       : '/mnt/NASone/curzio/Data/Meta_SST_GT/Task_5'
+    data_shape    : !!python/tuple [480, 480, 160]
+    dim_resolution : !!python/tuple [.65, .65, 2.]
+
+Preprocessing:
+    transpose         : !!python/tuple [2, 1, 0]
+    flip_axis         : 1
+    clip_threshold    : 4096
+    gamma_correction  : 1.2
+    downscale_factors : null
+
+Experiment:
+    name             : 'Task_5'
+    basepath         : '/mnt/NASone/curzio/Experiments/BCFind2.1'
+    input_shape      : !!python/tuple [160, 160, 80]
+    unet_iterations  : 3000
+    dog_iterations   : 30
+    batch_size       : 10
+    check_every      : 1
+    learning_rate    : 0.001
+    n_filters        : 32
+    e_size           : !!python/tuple [5, 5, 3]
+    e_stride         : !!python/tuple [2, 2, 2]
+    d_size           : !!python/tuple [5, 5, 3]
+    d_stride         : !!python/tuple [2, 2, 2]
