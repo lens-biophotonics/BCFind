@@ -1,4 +1,6 @@
+import os
 import ray
+import json
 import numpy as np
 import pandas as pd
 import skimage.feature as sk_feat
@@ -35,6 +37,23 @@ class BlobDoG:
         self.overlap = 0.8
         self.threshold = 10
 
+    def get_parameters(self):
+        par = {
+            "min_rad": self.min_rad,
+            "max_rad": self.max_rad,
+            "sigma_ratio": self.sigma_ratio,
+            "overlap": self.overlap,
+            "threshold": self.threshold,
+        }
+        return par
+
+    def set_parameters(self, parameters):
+        self.min_rad = parameters["min_rad"]
+        self.max_rad = parameters["max_rad"]
+        self.sigma_ratio = parameters["sigma_ratio"]
+        self.overlap = parameters["overlap"]
+        self.threshold = parameters["threshold"]
+
     def predict(self, x, parameters=None):
         if not parameters:
             min_sigma = (self.min_rad / self.dim_resolution) / np.sqrt(self.D)
@@ -70,16 +89,24 @@ class BlobDoG:
 
         pred_eval = pd.DataFrame([TP, FP, FN, pred_centers.shape[0], y.shape[0]]).T
         pred_eval.columns = ["TP", "FP", "FN", "tot_pred", "tot_true"]
-
-        f1 = metrics(pred_eval)["f1"]
-        tune.report(score=f1)
         return pred_eval
 
-    def _objective(self, parameters, X=None, Y=None):
+    def _objective(self, parameters, checkpoint_dir=None, X=None, Y=None):
         parameters["max_rad"] = parameters["min_rad"] + parameters["min_max_rad_diff"]
+
+        step = 0
+        if checkpoint_dir:
+            with open(os.path.join(checkpoint_dir, "checkpoint")) as f:
+                state = json.load(f.read())
+                step = state["step"] + 1
 
         res = [self.evaluate(x, y, parameters) for x, y in zip(X, Y)]
         res = pd.concat(res)
+
+        with tune.checkpoint_dir(step=step) as checkpoint_dir:
+            path = os.path.join(checkpoint_dir, "checkpoint")
+            with open(path, "w") as f:
+                f.write(json.dumps({"step": step}))
 
         f1 = metrics(res)["f1"]
         tune.report(score=f1)
@@ -125,28 +152,5 @@ class BlobDoG:
         )
 
         best_par = optim.get_best_config()
-        self.min_rad = best_par["min_rad"]
-        self.max_rad = best_par["min_rad"] + best_par["min_max_rad_diff"]
-        self.sigma_ratio = best_par["sigma_ratio"]
-        self.overlap = best_par["overlap"]
-        self.threshold = best_par["threshold"]
-
-        self.X_train = tune.utils.get_pinned_object(self.X_train)
-        self.Y_train = tune.utils.get_pinned_object(self.Y_train)
-
-    def get_parameters(self):
-        par = {
-            "min_rad": self.min_rad,
-            "max_rad": self.max_rad,
-            "sigma_ratio": self.sigma_ratio,
-            "overlap": self.overlap,
-            "threshold": self.threshold,
-        }
-        return par
-
-    def set_parameters(self, parameters_dict):
-        self.min_rad = parameters_dict["min_rad"]
-        self.max_rad = parameters_dict["max_rad"]
-        self.sigma_ratio = parameters_dict["sigma_ratio"]
-        self.overlap = parameters_dict["overlap"]
-        self.threshold = parameters_dict["threshold"]
+        best_par["max_rad"] = best_par["min_rad"] + best_par["min_max_rad_diff"]
+        self.set_parameters(best_par)
