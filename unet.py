@@ -59,10 +59,11 @@ class InvConvBlock(tf.keras.layers.Layer):
         self.activ = tf.keras.layers.Activation(activation)
         self.concat = tf.keras.layers.Concatenate(axis=-1)
 
-    def call(self, inputs, feat_concat=None, training=None):
+    def call(self, inputs, feat_concat=None, activation=True, training=None):
         h = self.conv3D_T(inputs)
         h = self.batch_norm(h, training=training)
-        h = self.activ(h)
+        if activation:
+            h = self.activ(h)
         if feat_concat is not None:
             h = self.concat([h, feat_concat])
         return h
@@ -114,7 +115,7 @@ class UNet(tf.keras.Model):
         h = self.inv_conv_block_1(h, feat_concat=h3, training=training)
         h = self.inv_conv_block_2(h, feat_concat=h2, training=training)
         h = self.inv_conv_block_3(h, feat_concat=h1, training=training)
-        h = self.inv_conv_block_4(h, training=training)
+        h = self.inv_conv_block_4(h, activation=False, training=training)
         return h
 
     def get_config(self):
