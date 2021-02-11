@@ -45,8 +45,8 @@ class BatchGenerator(tf.keras.utils.Sequence):
         region_y = y_batch[:, s[0] : e[0], s[1] : e[1], s[2] : e[2]]
 
         # add channel axis for conv3D layers
-        region_x = region_x[..., np.newaxis].astype("float32")
-        region_y = region_y[..., np.newaxis].astype("float32")
+        region_x = region_x[..., np.newaxis].astype("float32") / 255.0
+        region_y = region_y[..., np.newaxis].astype("float32") / 255.0
         return region_x, region_y
 
     def __getitem__(self, idx):
