@@ -40,7 +40,10 @@ def build_unet(
 
     loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
     optimizer = tf.keras.optimizers.Adam(learning_rate)
-    metrics = [tf.keras.metrics.Precision(), tf.keras.metrics.Recall()]
+    metrics = [
+        tf.keras.metrics.Precision(thresholds=0.0),
+        tf.keras.metrics.Recall(thresholds=0.0),
+    ]
 
     model.compile(
         loss=loss,
@@ -50,15 +53,22 @@ def build_unet(
     return model
 
 
-def get_callbacks(outdir, check_every):
+def get_callbacks(outdir, save_every, check_every):
     checkpoint_dir = f"{outdir}/UNet_checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
+
     tensorboard_dir = f"{outdir}/UNet_tensorboard"
     if os.path.exists(tensorboard_dir):
         shutil.rmtree(tensorboard_dir, ignore_errors=True)
 
     MC_callback = tf.keras.callbacks.ModelCheckpoint(
-        f"{checkpoint_dir}/model.h5", save_freq="epoch", monitor="loss"
+        f"{checkpoint_dir}/model.h5",
+        save_best_only=True,
+        save_weights_only=True,
+        save_freq="epoch",
+        monitor="loss",
+        mode="min",
+        verbose=1,
     )
 
     TB_callback = tf.keras.callbacks.TensorBoard(
@@ -76,7 +86,7 @@ def main(opts):
 
     print("Preparing data and building model for U-Net training")
     data = prepare_unet_data(x_file, y_file, opts.exp.batch_size, opts.exp.input_shape)
-    callbacks = get_callbacks(exp_outdir, opts.exp.check_every)
+    callbacks = get_callbacks(exp_outdir, opts.exp.save_every, opts.exp.check_every)
 
     unet = build_unet(
         opts.exp.n_filters,
@@ -134,10 +144,10 @@ def main(opts):
         outdir=dog_logs_dir,
         verbose=1,
     )
-    dog_par = pd.DataFrame(dog.get_parameters())
+    dog_par = pd.DataFrame.from_dict(dog.get_parameters())
     print(f"Best parameters found for DoG: {dog_par}")
-    dog_checkpoint_dir = f"{exp_outdir}/DoG_checkpoint"
-    dog_par.to_csv(dog_checkpoint_dir)
+    dog_res_path = f"{exp_outdir}/DoG_checkpoint/parameters.csv"
+    dog_par.to_csv(dog_res_path)
 
 
 def get_parser():
