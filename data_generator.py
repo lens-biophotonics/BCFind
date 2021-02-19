@@ -4,7 +4,7 @@ import tensorflow as tf
 
 
 class BatchGenerator(tf.keras.utils.Sequence):
-    def __init__(self, x_file, y_file, batch_size, input_shape):
+    def __init__(self, x_file, y_file, batch_size, output_shape):
         with h5py.File(x_file, "r") as fx:
             n = fx["x"].shape[0]
             self.x_train = fx["x"][()]
@@ -16,7 +16,7 @@ class BatchGenerator(tf.keras.utils.Sequence):
             self.y_train = fy["y"][()]
 
         self.batch_size = batch_size
-        self.input_shape = input_shape
+        self.output_shape = output_shape
         self.indices = list(range(self.x_train.shape[0]))
 
     def __len__(self):
@@ -31,15 +31,15 @@ class BatchGenerator(tf.keras.utils.Sequence):
         self, x_batch, y_batch, min_x_mean=20 / 255.0, min_y_mean=0.05 / 255.0
     ):
         lshape = x_batch[0].shape
-        assert lshape[2] >= self.input_shape[2]
+        assert lshape[2] >= self.output_shape[2]
 
         ri = np.random.randint
-        s0 = ri(0, max(1, lshape[0] - self.input_shape[0]))
-        s1 = ri(0, max(1, lshape[1] - self.input_shape[1]))
-        s2 = ri(0, max(1, lshape[2] - self.input_shape[2]))
+        s0 = ri(0, max(1, lshape[0] - self.output_shape[0]))
+        s1 = ri(0, max(1, lshape[1] - self.output_shape[1]))
+        s2 = ri(0, max(1, lshape[2] - self.output_shape[2]))
 
         s = np.array([s0, s1, s2])
-        e = s + self.input_shape
+        e = s + self.output_shape
 
         region_x = x_batch[:, s[0] : e[0], s[1] : e[1], s[2] : e[2]]
         region_y = y_batch[:, s[0] : e[0], s[1] : e[1], s[2] : e[2]]
@@ -57,3 +57,15 @@ class BatchGenerator(tf.keras.utils.Sequence):
     def __iter__(self):
         for item in (self[i] for i in range(len(self))):
             yield item
+
+
+def get_tf_data(x_file, y_file, batch_size, input_shape):
+    batch_gen = BatchGenerator(x_file, y_file, batch_size, input_shape)
+
+    data = tf.data.Dataset.from_generator(
+        lambda: batch_gen,
+        output_types=(tf.float32, tf.float32),
+        output_shapes=([None, *input_shape, 1], [None, *input_shape, 1]),
+    )
+    data = data.prefetch(3)
+    return data
