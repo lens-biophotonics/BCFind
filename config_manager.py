@@ -19,13 +19,27 @@ class Configuration:
         self.preproc = AttrDict(conf["Preprocessing"])
         self.exp = AttrDict(conf["Experiment"])
 
+        # Data folders
         self.data.train_tif_dir = f"{self.data.basepath}/Tiff_files/Train"
         self.data.train_gt_dir = f"{self.data.basepath}/GT_files/Train"
-
         self.data.test_tif_dir = f"{self.data.basepath}/Tiff_files/Test"
         self.data.test_gt_dir = f"{self.data.basepath}/GT_files/Test"
-
         self.data.files_h5_dir = f"{self.data.basepath}/H5_files"
+
+        # Experiments folders
+        self.exp.unet_checkpoint_dir = (
+            f"{self.exp.basepath}/{self.exp.name}/UNet_checkpoints"
+        )
+        self.exp.unet_tensorboard_dir = (
+            f"{self.exp.basepath}/{self.exp.name}/UNet_tensorboard"
+        )
+        self.exp.dog_logs_dir = f"{self.exp.basepath}/{self.exp.name}/DoG_logs"
+        self.exp.dog_checkpoint_dir = (
+            f"{self.exp.basepath}/{self.exp.name}/DoG_checkpoint"
+        )
+        self.exp.predictions_dir = (
+            f"{self.exp.basepath}/{self.exp.name}/{self.data.name}_predictions"
+        )
 
         self.data.data_shape = np.array(self.data.data_shape)
         self.data.dim_resolution = np.array(self.data.dim_resolution)
@@ -37,7 +51,7 @@ class Configuration:
             ).astype(int)
 
             self.data.dim_resolution = (
-                self.data.dim_resoltion / self.preproc.downscale_factors
+                self.data.dim_resolution / self.preproc.downscale_factors
             )
 
 

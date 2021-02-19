@@ -1,6 +1,7 @@
 Dataset:
+    name           : 'Task_5'
     basepath       : '/mnt/NASone/curzio/Data/Meta_SST_GT/Task_5'
-    data_shape    : !!python/tuple [480, 480, 160]
+    data_shape     : !!python/tuple [480, 480, 160]
     dim_resolution : !!python/tuple [.65, .65, 2.]
 
 Preprocessing:
@@ -14,7 +15,7 @@ Experiment:
     name             : 'Task_5'
     basepath         : '/mnt/NASone/curzio/Experiments/BCFind2.1'
     input_shape      : !!python/tuple [160, 160, 80]
-    unet_iterations  : 3000
+    unet_epochs      : 3000
     dog_iterations   : 30
     batch_size       : 10
     check_every      : 1
