@@ -3,6 +3,7 @@ import ray
 import json
 import numpy as np
 import pandas as pd
+import multiprocessing as mp
 import skimage.feature as sk_feat
 import ray.tune.suggest.hyperopt as ray_ho
 
@@ -15,15 +16,15 @@ def metrics(df):
     try:
         prec = np.sum(df.TP) / np.sum(df.TP + df.FP)
     except ZeroDivisionError:
-        prec = 1
+        prec = 1.0
     try:
         rec = np.sum(df.TP) / np.sum(df.TP + df.FN)
     except ZeroDivisionError:
-        rec = 1
+        rec = 1.0
     try:
-        f1 = 2 * prec * rec / (prec + rec)
+        f1 = 2.0 * prec * rec / (prec + rec)
     except ZeroDivisionError:
-        f1 = 0
+        f1 = 0.0
     return {"prec": prec, "rec": rec, "f1": f1}
 
 
@@ -33,7 +34,7 @@ class BlobDoG:
         self.dim_resolution = np.array(dim_resolution)
         self.min_rad = 7
         self.max_rad = 15
-        self.sigma_ratio = 1.6
+        self.sigma_ratio = 1.4
         self.overlap = 0.8
         self.threshold = 10
 
@@ -55,7 +56,7 @@ class BlobDoG:
         self.threshold = parameters["threshold"]
 
     def predict(self, x, parameters=None):
-        if not parameters:
+        if parameters is None:
             min_sigma = (self.min_rad / self.dim_resolution) / np.sqrt(self.D)
             max_sigma = (self.max_rad / self.dim_resolution) / np.sqrt(self.D)
 
@@ -82,34 +83,47 @@ class BlobDoG:
 
         return centers
 
-    def evaluate(self, x, y, parameters=None):
-        pred_centers = self.predict(x, parameters)
+    def evaluate(self, y_pred, y):
+        _, _, TP, FP, FN = bipartite_match(y, y_pred, 10, self.dim_resolution)
 
-        _, _, TP, FP, FN = bipartite_match(y, pred_centers, 10, self.dim_resolution)
-
-        pred_eval = pd.DataFrame([TP, FP, FN, pred_centers.shape[0], y.shape[0]]).T
+        pred_eval = pd.DataFrame([TP, FP, FN, y_pred.shape[0], y.shape[0]]).T
         pred_eval.columns = ["TP", "FP", "FN", "tot_pred", "tot_true"]
         return pred_eval
+
+    def predict_and_evaluate(self, x, y, parameters=None):
+        return self.evaluate(self.predict(x, parameters), y)
 
     def _objective(self, parameters, checkpoint_dir=None, X=None, Y=None):
         parameters["max_rad"] = parameters["min_rad"] + parameters["min_max_rad_diff"]
 
         step = 0
-        if checkpoint_dir:
-            with open(os.path.join(checkpoint_dir, "checkpoint")) as f:
-                state = json.load(f.read())
-                step = state["step"] + 1
+        if checkpoint_dir is not None:
+            if os.path.join(checkpoint_dir, "parameters.json").isfile():
+                with open(os.path.join(checkpoint_dir, "parameters.json")) as f:
+                    state = json.load(f)
+                    step = state["step"] + 1
 
-        res = [self.evaluate(x, y, parameters) for x, y in zip(X, Y)]
+        with mp.Pool(10) as pool:  # fixme: n_processes not configurable
+            res = pool.starmap_async(
+                self.predict_and_evaluate, [(x, y, parameters) for x, y in zip(X, Y)]
+            )
+
         res = pd.concat(res)
-
-        with tune.checkpoint_dir(step=step) as checkpoint_dir:
-            path = os.path.join(checkpoint_dir, "checkpoint")
-            with open(path, "w") as f:
-                f.write(json.dumps({"step": step}))
 
         f1 = metrics(res)["f1"]
         tune.report(score=f1)
+
+        if checkpoint_dir is not None:
+            with open(os.path.join(checkpoint_dir, "parameters.json"), "w") as f:
+                if step == 0:
+                    state = parameters
+                    state["f1"] = f1
+                else:
+                    if f1 > state["f1"]:
+                        state = parameters
+                        state["f1"] = f1
+                state["step"] = step
+                json.dumps(state, f)
 
     def fit(self, X, Y, n_iter=50, n_cpu=10, n_gpu=1, outdir=None, verbose=0):
         ray.init()
@@ -133,21 +147,23 @@ class BlobDoG:
         scheduler = tune.schedulers.AsyncHyperBandScheduler()
 
         optim = tune.run(
-            tune.with_parameters(self._objective, X=X, Y=Y),
+            tune.with_parameters(
+                self._objective, checkpoint_dir=f"{outdir}/DoG_checkpoints", X=X, Y=Y
+            ),
             num_samples=n_iter,
             search_alg=algo,
             config={
                 "min_rad": tune.uniform(5.0, 15.0),
                 "min_max_rad_diff": tune.uniform(1.0, 10.0),
                 "sigma_ratio": tune.uniform(1.0, 2.0),
-                "overlap": tune.uniform(0.5, 1.0),
-                "threshold": tune.uniform(0.0, 20.0),
+                "overlap": tune.uniform(0.1, 1.0),
+                "threshold": tune.uniform(0.0, 50.0),
             },
             metric="score",
             mode="max",
             scheduler=scheduler,
             resources_per_trial={"gpu": n_gpu, "cpu": n_cpu},
-            local_dir=outdir,
+            local_dir=f"{outdir}/DoG_logs",
             verbose=verbose,
         )
 
