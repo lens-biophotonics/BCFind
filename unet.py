@@ -59,13 +59,12 @@ class InvConvBlock(tf.keras.layers.Layer):
         self.activ = tf.keras.layers.Activation(activation)
         self.concat = tf.keras.layers.Concatenate(axis=-1)
 
-    def call(self, inputs, feat_concat=None, activation=True, training=None):
+    def call(self, inputs, skip_connect=None, training=None):
         h = self.conv3D_T(inputs)
         h = self.batch_norm(h, training=training)
-        if activation:
-            h = self.activ(h)
-        if feat_concat is not None:
-            h = self.concat([h, feat_concat])
+        h = self.activ(h)
+        if skip_connect is not None:
+            h = self.concat([h, skip_connect])
         return h
 
     def get_config(self):
@@ -104,7 +103,7 @@ class UNet(tf.keras.Model):
         self.inv_conv_block_1 = InvConvBlock(n_filters * 4, d_size, (1, 1, 1), "relu")
         self.inv_conv_block_2 = InvConvBlock(n_filters * 2, d_size, (1, 1, 1), "relu")
         self.inv_conv_block_3 = InvConvBlock(n_filters, d_size, d_stride, "relu")
-        self.inv_conv_block_4 = InvConvBlock(1, d_size, d_stride, "sigmoid")
+        self.inv_conv_block_4 = InvConvBlock(1, d_size, d_stride, "linear")
 
     def call(self, inputs, training=None):
         h1 = self.conv_block_1(inputs, training=training)
@@ -112,10 +111,10 @@ class UNet(tf.keras.Model):
         h3 = self.conv_block_3(h2, training=training)
         h = self.conv_block_4(h3, training=training)
 
-        h = self.inv_conv_block_1(h, feat_concat=h3, training=training)
-        h = self.inv_conv_block_2(h, feat_concat=h2, training=training)
-        h = self.inv_conv_block_3(h, feat_concat=h1, training=training)
-        h = self.inv_conv_block_4(h, activation=False, training=training)
+        h = self.inv_conv_block_1(h, skip_connect=h3, training=training)
+        h = self.inv_conv_block_2(h, skip_connect=h2, training=training)
+        h = self.inv_conv_block_3(h, skip_connect=h1, training=training)
+        h = self.inv_conv_block_4(h, training=training)
         return h
 
     def get_config(self):
