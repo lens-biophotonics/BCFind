@@ -1,4 +1,5 @@
 import os
+import json
 import shutil
 import argparse
 import numpy as np
@@ -6,24 +7,10 @@ import pandas as pd
 import tensorflow as tf
 
 from make_training_data import get_substack
-from data_generator import BatchGenerator
+from data_generator import get_tf_data
 from config_manager import Configuration
 from unet import UNet
 from blob_dog import BlobDoG
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
-
-def prepare_unet_data(x_file, y_file, batch_size, input_shape):
-    batch_gen = BatchGenerator(x_file, y_file, batch_size, input_shape)
-
-    data = tf.data.Dataset.from_generator(
-        lambda: batch_gen,
-        output_types=(tf.float32, tf.float32),
-        output_shapes=([None, *input_shape, 1], [None, *input_shape, 1]),
-    )
-    data = data.prefetch(3)
-    return data
 
 
 def build_unet(
@@ -40,10 +27,7 @@ def build_unet(
 
     loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
     optimizer = tf.keras.optimizers.Adam(learning_rate)
-    metrics = [
-        tf.keras.metrics.Precision(thresholds=0.0),
-        tf.keras.metrics.Recall(thresholds=0.0),
-    ]
+    metrics = ["accuracy", "recall", "mse"]
 
     model.compile(
         loss=loss,
@@ -53,11 +37,8 @@ def build_unet(
     return model
 
 
-def get_callbacks(outdir, save_every, check_every):
-    checkpoint_dir = f"{outdir}/UNet_checkpoints"
+def get_callbacks(checkpoint_dir, tensorboard_dir, check_every):
     os.makedirs(checkpoint_dir, exist_ok=True)
-
-    tensorboard_dir = f"{outdir}/UNet_tensorboard"
     if os.path.exists(tensorboard_dir):
         shutil.rmtree(tensorboard_dir, ignore_errors=True)
 
@@ -79,14 +60,21 @@ def get_callbacks(outdir, save_every, check_every):
     return [MC_callback, TB_callback]
 
 
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+
 def main(opts):
     x_file = f"{opts.data.files_h5_dir}/X_train.h5"
     y_file = f"{opts.data.files_h5_dir}/Y_train.h5"
-    exp_outdir = f"{opts.exp.basepath}/{opts.exp.name}"
 
     print("Preparing data and building model for U-Net training")
-    data = prepare_unet_data(x_file, y_file, opts.exp.batch_size, opts.exp.input_shape)
-    callbacks = get_callbacks(exp_outdir, opts.exp.save_every, opts.exp.check_every)
+    data = get_tf_data(x_file, y_file, opts.exp.batch_size, opts.exp.input_shape)
+    callbacks = get_callbacks(
+        opts.exp.unet_checkpoint_dir,
+        opts.exp.unet_tensorboard_dir,
+        opts.exp.check_every,
+    )
 
     unet = build_unet(
         opts.exp.n_filters,
@@ -102,14 +90,20 @@ def main(opts):
     print("U-Net training")
     unet.fit(
         data,
-        epochs=opts.exp.unet_iterations,
+        epochs=opts.exp.unet_epochs,
         callbacks=callbacks,
     )
 
     print("Preparing data for DoG training")
+    file_names = [
+        f
+        for f in os.listdir(opts.data.train_tif_dir)
+        if f.endswith(".tiff") or f.endswith(".tif")
+    ]
     unet_pred = []
     Y_train = []
-    for f_name in os.listdir(opts.data.train_tif_dir):
+    for f_name in file_names:
+        print(f"Loading file {f_name}")
         x = get_substack(
             f"{opts.data.train_tif_dir}/{f_name}",
             opts.data.data_shape,
@@ -120,17 +114,21 @@ def main(opts):
             downscale_factors=opts.preproc.downscale_factors,
         )
         x = x[np.newaxis, ..., np.newaxis]
-        y = pd.read_csv(open(f"{opts.data.train_gt_dir}/{f_name}.marker", "r"))
-        y = y[["#x", " y", " z"]].dropna(0)
 
         print(f"Unet prediction on file {f_name}")
-        unet_pred_i = unet.predict(x).reshape(opts.data.data_shape) * 255
+        unet_pred_i = (
+            sigmoid(np.array(unet(x, training=False)).reshape(opts.data.data_shape))
+            * 255
+        )
         unet_pred.append(unet_pred_i)
 
+        print(f"Loading .marker file for {f_name}")
+        y = pd.read_csv(open(f"{opts.data.train_gt_dir}/{f_name}.marker", "r"))
+        y = y[["#x", " y", " z"]].dropna(0)
         Y_train.append(y)
 
     print("Training DoG")
-    dog_logs_dir = f"{exp_outdir}/DoG_logs"
+    dog_logs_dir = opts.exp.dog_logs_dir
     if os.path.exists(dog_logs_dir):
         shutil.rmtree(dog_logs_dir)
 
@@ -144,10 +142,12 @@ def main(opts):
         outdir=dog_logs_dir,
         verbose=1,
     )
-    dog_par = pd.DataFrame.from_dict(dog.get_parameters())
+    dog_par = dog.get_parameters()
     print(f"Best parameters found for DoG: {dog_par}")
-    dog_res_path = f"{exp_outdir}/DoG_checkpoint/parameters.csv"
-    dog_par.to_csv(dog_res_path)
+
+    os.makedirs(opts.exp.dog_checkpoint_dir, exist_ok=True)
+    with open(f"{opts.exp.dog_checkpoint_dir}/parameters.json", "w") as outfile:
+        json.dump(dog_par, outfile)
 
 
 def get_parser():
