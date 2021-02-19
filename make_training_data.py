@@ -19,7 +19,7 @@ def iround(val):
 def get_target(
     file_path,
     target_shape,
-    default_radius=4.5,
+    default_radius=3.5,
     safe_factor=3.0,
     dim_resolution=1,
     downscale_factors=None,
@@ -103,7 +103,7 @@ def get_target(
             dim_sigma = sigma / (dim_resolution / np.min(dim_resolution))
 
             component = sp_filt.gaussian_filter(
-                component, dim_sigma, truncate=2, mode="constant"
+                component, dim_sigma, truncate=2.5, mode="constant"
             )
             component = component / component.max()
 
@@ -121,11 +121,6 @@ def get_target(
 
         target = target / target.max()
 
-    # Making a movie for inspection, alternatively save as an npz file for training..
-    # NOTE: this may require transposing since here the target tensor has axes ordered as x,y,z
-    # target = (255*target).astype(np.uint8) # use 8 bit for the video
-    # make_video(target,fname+'.mp4')
-
     return target
 
 
@@ -140,6 +135,7 @@ def get_substack(
 ):
     im = io.imread(file_path)
 
+    # Preprocessing
     if transpose is not None:
         im = np.transpose(im, transpose)
     if flip_axis is not None:
@@ -147,7 +143,7 @@ def get_substack(
     if clip_threshold is not None:
         im[np.where(im > clip_threshold)] = clip_threshold
     if gamma_correction is not None:
-        im = np.power(im / im.max(), 1.0 / gamma_correction)
+        im = np.power(im / im.max(), gamma_correction)
     if downscale_factors is not None:
         im = sk_trans.rescale(im, downscale_factors, anti_aliasing=False)
 
@@ -201,13 +197,15 @@ def main(args):
             target = get_target(
                 marker_path,
                 conf.data.data_shape,
-                default_radius=4.5,
-                safe_factor=3.0,
+                default_radius=3.5,
+                safe_factor=3.5,
                 dim_resolution=conf.data.dim_resolution,
                 downscale_factors=conf.preproc.downscale_factors,
             )
         except FileNotFoundError:
-            print(f"File .marker for {fname} not found. Assumed without neurons.")
+            print(
+                f"File .marker for {fname} not found. Assumed without neurons. Black target returned."
+            )
             target = np.zeros(conf.data.input_shape)
 
         fx["x"][i, :, :, :] = (image * 255).astype(np.uint8)
