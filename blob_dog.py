@@ -90,8 +90,13 @@ class BlobDoG:
         pred_eval.columns = ["TP", "FP", "FN", "tot_pred", "tot_true"]
         return pred_eval
 
-    def predict_and_evaluate(self, x, y, parameters=None):
-        return self.evaluate(self.predict(x, parameters), y)
+    def predict_and_evaluate(self, x, y, parameters=None, return_centers=True):
+        centers = self.predict(x, parameters)
+        evaluation = self.evaluate(centers, y)
+        if return_centers:
+            return centers, evaluation
+        if not return_centers:
+            return evaluation
 
     def _objective(self, parameters, checkpoint_dir=None, X=None, Y=None):
         parameters["max_rad"] = parameters["min_rad"] + parameters["min_max_rad_diff"]
@@ -105,7 +110,8 @@ class BlobDoG:
 
         with mp.Pool(10) as pool:  # fixme: n_processes not configurable
             res = pool.starmap_async(
-                self.predict_and_evaluate, [(x, y, parameters) for x, y in zip(X, Y)]
+                self.predict_and_evaluate,
+                [(x, y, parameters, False) for x, y in zip(X, Y)],
             )
 
         res = pd.concat(res)
