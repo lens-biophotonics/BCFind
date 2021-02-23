@@ -27,7 +27,7 @@ def build_unet(
 
     loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
     optimizer = tf.keras.optimizers.Adam(learning_rate)
-    metrics = ["accuracy", "recall", "mse"]
+    metrics = ["accuracy", "mse"]
 
     model.compile(
         loss=loss,
@@ -54,8 +54,8 @@ def get_callbacks(checkpoint_dir, tensorboard_dir, check_every):
 
     TB_callback = tf.keras.callbacks.TensorBoard(
         tensorboard_dir,
-        embeddings_freq=check_every,
         update_freq=check_every,
+        write_graph=False,
     )
     return [MC_callback, TB_callback]
 
