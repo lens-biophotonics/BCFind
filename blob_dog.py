@@ -98,18 +98,20 @@ class BlobDoG:
         if not return_centers:
             return evaluation
 
-    def _objective(self, parameters, checkpoint_dir=None, X=None, Y=None):
+    def _objective(self, parameters, X, Y, checkpoint_dir=None):
         parameters["max_rad"] = parameters["min_rad"] + parameters["min_max_rad_diff"]
 
         step = 0
         if checkpoint_dir is not None:
-            if os.path.join(checkpoint_dir, "parameters.json").isfile():
-                with open(os.path.join(checkpoint_dir, "parameters.json")) as f:
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            checkpoint_file = os.path.join(checkpoint_dir, "parameters.json")
+            if os.path.isfile(checkpoint_file):
+                with open(checkpoint_file) as f:
                     state = json.load(f)
                     step = state["step"] + 1
 
         with mp.Pool(10) as pool:  # fixme: n_processes not configurable
-            res = pool.starmap_async(
+            res = pool.starmap(
                 self.predict_and_evaluate,
                 [(x, y, parameters, False) for x, y in zip(X, Y)],
             )
@@ -120,18 +122,28 @@ class BlobDoG:
         tune.report(score=f1)
 
         if checkpoint_dir is not None:
-            with open(os.path.join(checkpoint_dir, "parameters.json"), "w") as f:
-                if step == 0:
+            if step == 0:
+                state = parameters
+                state["f1"] = f1
+            else:
+                if f1 > state["f1"]:
                     state = parameters
                     state["f1"] = f1
-                else:
-                    if f1 > state["f1"]:
-                        state = parameters
-                        state["f1"] = f1
-                state["step"] = step
+            state["step"] = step
+            with open(checkpoint_file, "w") as f:
                 json.dumps(state, f)
 
-    def fit(self, X, Y, n_iter=50, n_cpu=10, n_gpu=1, outdir=None, verbose=0):
+    def fit(
+        self,
+        X,
+        Y,
+        n_iter=50,
+        n_cpu=10,
+        n_gpu=1,
+        logs_dir=None,
+        checkpoint_dir=None,
+        verbose=0,
+    ):
         ray.init()
 
         init = [
@@ -154,7 +166,7 @@ class BlobDoG:
 
         optim = tune.run(
             tune.with_parameters(
-                self._objective, checkpoint_dir=f"{outdir}/DoG_checkpoints", X=X, Y=Y
+                self._objective, X=X, Y=Y, checkpoint_dir=checkpoint_dir
             ),
             num_samples=n_iter,
             search_alg=algo,
@@ -169,7 +181,7 @@ class BlobDoG:
             mode="max",
             scheduler=scheduler,
             resources_per_trial={"gpu": n_gpu, "cpu": n_cpu},
-            local_dir=f"{outdir}/DoG_logs",
+            local_dir=logs_dir,
             verbose=verbose,
         )
 

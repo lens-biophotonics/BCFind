@@ -113,7 +113,7 @@ def main(opts):
             gamma_correction=opts.preproc.gamma_correction,
             downscale_factors=opts.preproc.downscale_factors,
         )
-        x = x[np.newaxis, ..., np.newaxis]
+        x = x[np.newaxis, ..., np.newaxis].astype("float32")
 
         print(f"Unet prediction on file {f_name}")
         unet_pred_i = (
@@ -128,18 +128,20 @@ def main(opts):
         Y_train.append(y)
 
     print("Training DoG")
-    dog_logs_dir = opts.exp.dog_logs_dir
-    if os.path.exists(dog_logs_dir):
-        shutil.rmtree(dog_logs_dir)
+    if os.path.exists(opts.exp.dog_logs_dir):
+        shutil.rmtree(opts.exp.dog_logs_dir)
+    if os.path.exists(opts.exp.dog_checkpoint_dir):
+        shutil.rmtree(opts.exp.dog_checkpoint_dir)
 
     dog = BlobDoG(Y_train[0].shape[1], opts.data.dim_resolution)
     dog.fit(
         unet_pred,
         Y_train,
         n_iter=opts.exp.dog_iterations,
-        n_cpu=10,
+        n_cpu=1,
         n_gpu=1,
-        outdir=dog_logs_dir,
+        logs_dir=opts.exp.dog_logs_dir,
+        checkpoint_dir=opts.exp.dog_checkpoint_dir,
         verbose=1,
     )
     dog_par = dog.get_parameters()
