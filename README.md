@@ -121,9 +121,10 @@ all files .yaml in `Train_bcfind` will start a training process with that config
 <br>
 
 The **main function** of `train` module will build the U-Net architecture, compile it with Adam as optimizer and start the training with ModelCheckpoint and TensorBoard callbacks. The callbacks will create the folders `{Experiment.basepath}/{Experiment.name}/UNet_tensorboard` and `{Experiment.basepath}/{Experiment.name}/UNet_checkpoints` to monitor the loss and other metrics and to periodically save the weights of the model.<br>
-Once the U-Net training is completed, the DoG training will start. This firstly needs the train-set predictions of the U-Net, then a Tree-Parzen Estimator will search for the best parameters based on the F1 computed on the full train-set. During the DoG training two folders will be created: `{Experiment.basepath}/{Experiment.name}/DoG_logs` and `{Experiment.basepath}/{Experiment.name}/DoG_checkpoints` to monitor the training steps and save the model parameters, respectively.
-
+Once the U-Net training is completed, the DoG training will start. This firstly needs the train-set predictions of the U-Net, then a Tree-Parzen Estimator will search for the best parameters based on the F1 computed on the full train-set. During the DoG training two folders will be created: `{Experiment.basepath}/{Experiment.name}/DoG_logs` and `{Experiment.basepath}/{Experiment.name}/DoG_checkpoints` to monitor the training steps and save the model parameters, respectively.<br>
 <br>
+<br>
+
 #### Step 4 - Evaluate BCFind predictions
 **Requirements**:<br>
 `os, json, argparse, numpy, pandas, tensorflow==2.3`
