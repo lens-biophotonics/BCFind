@@ -129,19 +129,19 @@ def main(opts):
 
     print("Training DoG")
     if os.path.exists(opts.exp.dog_logs_dir):
-        shutil.rmtree(opts.exp.dog_logs_dir)
+        shutil.rmtree(opts.exp.dog_logs_dir, ignore_errors=True)
     if os.path.exists(opts.exp.dog_checkpoint_dir):
-        shutil.rmtree(opts.exp.dog_checkpoint_dir)
+        shutil.rmtree(opts.exp.dog_checkpoint_dir, ignore_errors=True)
 
     dog = BlobDoG(Y_train[0].shape[1], opts.data.dim_resolution)
     dog.fit(
         unet_pred,
         Y_train,
         n_iter=opts.exp.dog_iterations,
-        n_cpu=1,
-        n_gpu=1,
         logs_dir=opts.exp.dog_logs_dir,
         checkpoint_dir=opts.exp.dog_checkpoint_dir,
+        n_cpu=10,
+        n_gpu=1,
         verbose=1,
     )
     dog_par = dog.get_parameters()

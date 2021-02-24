@@ -3,7 +3,7 @@ import ray
 import json
 import numpy as np
 import pandas as pd
-import multiprocessing as mp
+import concurrent.futures as cf
 import skimage.feature as sk_feat
 import ray.tune.suggest.hyperopt as ray_ho
 
@@ -83,14 +83,16 @@ class BlobDoG:
 
         return centers
 
-    def evaluate(self, y_pred, y):
-        _, _, TP, FP, FN = bipartite_match(y, y_pred, 10, self.dim_resolution)
+    def evaluate(self, y_pred, y, max_match_dist=10):
+        _, _, TP, FP, FN = bipartite_match(
+            y, y_pred, max_match_dist, self.dim_resolution
+        )
 
         pred_eval = pd.DataFrame([TP, FP, FN, y_pred.shape[0], y.shape[0]]).T
         pred_eval.columns = ["TP", "FP", "FN", "tot_pred", "tot_true"]
         return pred_eval
 
-    def predict_and_evaluate(self, x, y, parameters=None, return_centers=True):
+    def predict_and_evaluate(self, x, y, return_centers=True, parameters=None):
         centers = self.predict(x, parameters)
         evaluation = self.evaluate(centers, y)
         if return_centers:
@@ -98,7 +100,7 @@ class BlobDoG:
         if not return_centers:
             return evaluation
 
-    def _objective(self, parameters, X, Y, checkpoint_dir=None):
+    def _objective(self, parameters, X, Y, checkpoint_dir=None, n_cpu=1):
         parameters["max_rad"] = parameters["min_rad"] + parameters["min_max_rad_diff"]
 
         step = 0
@@ -106,15 +108,16 @@ class BlobDoG:
             os.makedirs(checkpoint_dir, exist_ok=True)
             checkpoint_file = os.path.join(checkpoint_dir, "parameters.json")
             if os.path.isfile(checkpoint_file):
-                with open(checkpoint_file) as f:
+                with open(checkpoint_file, "r") as f:
                     state = json.load(f)
-                    step = state["step"] + 1
+                step = state["step"] + 1
 
-        with mp.Pool(10) as pool:  # fixme: n_processes not configurable
-            res = pool.starmap(
-                self.predict_and_evaluate,
-                [(x, y, parameters, False) for x, y in zip(X, Y)],
-            )
+        with cf.ThreadPoolExecutor(n_cpu) as pool:
+            futures = [
+                pool.submit(self.predict_and_evaluate, x, y, False, parameters)
+                for x, y in zip(X, Y)
+            ]
+            res = [future.result() for future in cf.as_completed(futures)]
 
         res = pd.concat(res)
 
@@ -125,23 +128,26 @@ class BlobDoG:
             if step == 0:
                 state = parameters
                 state["f1"] = f1
+                state["step"] = step
+                with open(checkpoint_file, "w") as f:
+                    json.dump(state, f)
             else:
                 if f1 > state["f1"]:
                     state = parameters
                     state["f1"] = f1
-            state["step"] = step
-            with open(checkpoint_file, "w") as f:
-                json.dumps(state, f)
+                    state["step"] = step
+                    with open(checkpoint_file, "w") as f:
+                        json.dump(state, f)
 
     def fit(
         self,
         X,
         Y,
-        n_iter=50,
-        n_cpu=10,
-        n_gpu=1,
+        n_iter=30,
         logs_dir=None,
         checkpoint_dir=None,
+        n_cpu=10,
+        n_gpu=1,
         verbose=0,
     ):
         ray.init()
@@ -160,13 +166,17 @@ class BlobDoG:
         algo = ray_ho.HyperOptSearch(points_to_evaluate=init)
         # Gaussian-process estimator
         # algo = ray_ho.BayesOptSearch(points_to_evaluate=init)
-        algo = tune.suggest.ConcurrencyLimiter(algo, max_concurrent=4)
+        algo = tune.suggest.ConcurrencyLimiter(algo, max_concurrent=3)
 
         scheduler = tune.schedulers.AsyncHyperBandScheduler()
 
         optim = tune.run(
             tune.with_parameters(
-                self._objective, X=X, Y=Y, checkpoint_dir=checkpoint_dir
+                self._objective,
+                X=X,
+                Y=Y,
+                checkpoint_dir=checkpoint_dir,
+                n_cpu=n_cpu,
             ),
             num_samples=n_iter,
             search_alg=algo,
@@ -180,11 +190,13 @@ class BlobDoG:
             metric="score",
             mode="max",
             scheduler=scheduler,
-            resources_per_trial={"gpu": n_gpu, "cpu": n_cpu},
             local_dir=logs_dir,
+            resources_per_trial={"cpu": 1, "gpu": n_gpu},
             verbose=verbose,
         )
 
         best_par = optim.get_best_config()
         best_par["max_rad"] = best_par["min_rad"] + best_par["min_max_rad_diff"]
         self.set_parameters(best_par)
+
+        ray.shutdown()
