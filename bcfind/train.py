@@ -13,6 +13,17 @@ from unet import UNet
 from blob_dog import BlobDoG
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__, prog="train.py")
+    parser.add_argument(
+        "config",
+        type=str,
+        help="Path to .yaml file containing the needed configuration settings.",
+    )
+    args = parser.parse_args()
+    return args
+
+
 def build_unet(
     n_filters, e_size, e_stride, d_size, d_stride, input_shape, learning_rate
 ):
@@ -60,7 +71,10 @@ def get_callbacks(checkpoint_dir, tensorboard_dir, check_every):
     return [MC_callback, TB_callback]
 
 
-def main(opts):
+def main():
+    args = parse_args()
+    opts = Configuration(args.config)
+
     x_file = f"{opts.data.files_h5_dir}/X_train.h5"
     y_file = f"{opts.data.files_h5_dir}/Y_train.h5"
 
@@ -148,13 +162,5 @@ def main(opts):
         json.dump(dog_par, outfile)
 
 
-def get_parser():
-    parser = argparse.ArgumentParser(description=__doc__, prog="train.py")
-    parser.add_argument("config", type=str, help="Configuration file")
-    return parser
-
-
 if __name__ == "__main__":
-    args = get_parser().parse_args()
-    config = Configuration(args.config)
-    main(config)
+    main()

@@ -11,6 +11,18 @@ from train import build_unet, sigmoid
 from blob_dog import BlobDoG
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__, prog="evaluate_train.py")
+    parser.add_argument(
+        "config",
+        type=str,
+        help="Path to .yaml file containing the needed configuration settings.",
+    )
+
+    args = parser.parse_args()
+    return args
+
+
 def predict_file(
     unet,
     dog,
@@ -58,7 +70,8 @@ def evaluate_prediction(dog, predicted, gt_file_path):
     return res
 
 
-def main(args):
+def main():
+    args = parse_args()
     opts = Configuration(args.config)
 
     # Build UNet and load weights
@@ -159,12 +172,5 @@ def main(args):
     print(f"{opts.exp.name}: Test-set of {opts.data.name} evaluated with {perf}")
 
 
-def get_parser():
-    parser = argparse.ArgumentParser(description=__doc__, prog="train.py")
-    parser.add_argument("config", type=str, help="Configuration file")
-    return parser
-
-
 if __name__ == "__main__":
-    args = get_parser().parse_args()
-    main(args)
+    main()

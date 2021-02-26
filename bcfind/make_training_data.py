@@ -11,6 +11,22 @@ from config_manager import Configuration
 from utils import get_substack, iround
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        prog="make_training_data.py",
+        formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(
+            prog, max_help_position=52, width=90
+        ),
+    )
+    parser.add_argument(
+        "config",
+        type=str,
+        help="Path to .yaml file containing the needed configuration settings",
+    )
+    return parser.parse_args()
+
+
 def get_target(
     file_path,
     target_shape,
@@ -119,7 +135,8 @@ def get_target(
     return target
 
 
-def main(args):
+def main():
+    args = parse_args()
     conf = Configuration(args.config)
 
     os.makedirs(conf.data.files_h5_dir, exist_ok=True)
@@ -182,17 +199,5 @@ def main(args):
     np.save(f"{conf.data.files_h5_dir}/file_names.npy", all_fnames)
 
 
-def get_parser():
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        prog="make_training_data.py",
-        formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(
-            prog, max_help_position=52, width=90
-        ),
-    )
-    parser.add_argument("config", type=str, help="configuration file")
-    return parser
-
-
 if __name__ == "__main__":
-    main(get_parser().parse_args())
+    main()
