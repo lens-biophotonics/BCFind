@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from make_training_data import get_substack
 from data_generator import get_tf_data
+from utils import get_substack, sigmoid
 from config_manager import Configuration
 from unet import UNet
 from blob_dog import BlobDoG
@@ -58,10 +58,6 @@ def get_callbacks(checkpoint_dir, tensorboard_dir, check_every):
         write_graph=False,
     )
     return [MC_callback, TB_callback]
-
-
-def sigmoid(x):
-    return 1 / (1 + np.exp(-x))
 
 
 def main(opts):

@@ -10,22 +10,7 @@ import ray.tune.suggest.hyperopt as ray_ho
 from ray import tune
 
 from bipartite_match import bipartite_match
-
-
-def metrics(df):
-    try:
-        prec = np.sum(df.TP) / np.sum(df.TP + df.FP)
-    except ZeroDivisionError:
-        prec = 1.0
-    try:
-        rec = np.sum(df.TP) / np.sum(df.TP + df.FN)
-    except ZeroDivisionError:
-        rec = 1.0
-    try:
-        f1 = 2.0 * prec * rec / (prec + rec)
-    except ZeroDivisionError:
-        f1 = 0.0
-    return {"prec": prec, "rec": rec, "f1": f1}
+from utils import metrics
 
 
 class BlobDoG:
@@ -80,7 +65,6 @@ class BlobDoG:
                 overlap=parameters["overlap"],
                 threshold=parameters["threshold"],
             )
-
         return centers
 
     def evaluate(self, y_pred, y, max_match_dist=10):

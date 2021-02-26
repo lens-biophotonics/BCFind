@@ -3,17 +3,12 @@ import h5py
 import argparse
 import numpy as np
 import pandas as pd
-import skimage.transform as sk_trans
 import scipy.ndimage.filters as sp_filt
 import scipy.spatial.distance as sp_dist
 from colorama import Fore as FG
-from skimage import io
 
 from config_manager import Configuration
-
-
-def iround(val):
-    return int(round(val))
+from utils import get_substack, iround
 
 
 def get_target(
@@ -122,37 +117,6 @@ def get_target(
         target = target / target.max()
 
     return target
-
-
-def get_substack(
-    file_path,
-    data_shape,
-    transpose=None,
-    flip_axis=None,
-    clip_threshold=None,
-    gamma_correction=None,
-    downscale_factors=None,
-):
-    im = io.imread(file_path)
-
-    # Preprocessing
-    if transpose is not None:
-        im = np.transpose(im, transpose)
-    if flip_axis is not None:
-        im = np.flip(im, axis=flip_axis)
-    if clip_threshold is not None:
-        im[np.where(im > clip_threshold)] = clip_threshold
-    if gamma_correction is not None:
-        im = np.power(im / im.max(), gamma_correction)
-    if downscale_factors is not None:
-        im = sk_trans.rescale(im, downscale_factors, anti_aliasing=False)
-
-    im_shape = im.shape
-
-    substack = np.zeros(data_shape)  # paddle substacks with zeros
-    substack[: im_shape[0], : im_shape[1], : im_shape[2]] = im
-
-    return substack
 
 
 def main(args):

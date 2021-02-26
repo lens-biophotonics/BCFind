@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from train import build_unet, sigmoid
-from blob_dog import BlobDoG, metrics
 from config_manager import Configuration
-from make_training_data import get_substack
+from utils import get_substack, metrics
+from train import build_unet, sigmoid
+from blob_dog import BlobDoG
 
 
 def predict_file(
@@ -59,8 +59,6 @@ def evaluate_prediction(dog, predicted, gt_file_path):
 
 
 def main(args):
-    N_CPU = 30
-
     opts = Configuration(args.config)
 
     # Build UNet and load weights
@@ -86,7 +84,7 @@ def main(args):
         pass
 
     # Predict and evaluate on train-set
-    print(f"BCFind predictions on {opts.data.name} train-set.")
+    print(f"{opts.exp.name}: BCFind predictions on {opts.data.name} train-set.")
     train_files = [
         f
         for f in os.listdir(opts.data.train_tif_dir)
@@ -120,10 +118,11 @@ def main(args):
     train_res.to_csv(f"{opts.exp.predictions_dir}/train_eval.csv")
 
     perf = metrics(train_res)
-    print(f"Train-set of {opts.data.name} evaluated with {perf}")
+    print(f"{opts.exp.name}: Train-set of {opts.data.name} evaluated with {perf}")
+    print("")
 
     # Predict and evaluate on test-set
-    print("BCFind predictions on {opts.data.name} test-set.")
+    print(f"{opts.exp.name}: BCFind predictions on {opts.data.name} test-set.")
     test_files = [
         f
         for f in os.listdir(opts.data.test_tif_dir)
@@ -157,7 +156,7 @@ def main(args):
     test_res.to_csv(f"{opts.exp.predictions_dir}/test_eval.csv")
 
     perf = metrics(test_res)
-    print(f"Test-set of {opts.data.name} evaluated with {perf}")
+    print(f"{opts.exp.name}: Test-set of {opts.data.name} evaluated with {perf}")
 
 
 def get_parser():
