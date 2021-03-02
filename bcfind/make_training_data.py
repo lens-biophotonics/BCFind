@@ -144,8 +144,8 @@ def main():
     tifnames = [f for f in os.listdir(conf.data.train_tif_dir)]
     n = len(tifnames)
 
-    fx = h5py.File(f"{conf.data.files_h5_dir}/X_train.h5", "w")
-    fy = h5py.File(f"{conf.data.files_h5_dir}/Y_train.h5", "w")
+    fx = h5py.File(f"{conf.exp.train_data_dir}/X_train.h5", "w")
+    fy = h5py.File(f"{conf.exp.train_data_dir}/Y_train.h5", "w")
 
     print("Creating x dataset")
     fx.create_dataset(

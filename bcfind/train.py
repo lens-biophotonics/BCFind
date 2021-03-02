@@ -75,8 +75,8 @@ def main():
     args = parse_args()
     opts = Configuration(args.config)
 
-    x_file = f"{opts.data.files_h5_dir}/X_train.h5"
-    y_file = f"{opts.data.files_h5_dir}/Y_train.h5"
+    x_file = f"{opts.exp.train_data_dir}/X_train.h5"
+    y_file = f"{opts.exp.train_data_dir}/Y_train.h5"
 
     print("Preparing data and building model for U-Net training")
     data = get_tf_data(x_file, y_file, opts.exp.batch_size, opts.exp.input_shape)
