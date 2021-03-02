@@ -59,13 +59,13 @@ class BatchGenerator(tf.keras.utils.Sequence):
             yield item
 
 
-def get_tf_data(x_file, y_file, batch_size, input_shape):
-    batch_gen = BatchGenerator(x_file, y_file, batch_size, input_shape)
+def get_tf_data(x_file, y_file, batch_size, output_shape):
+    batch_gen = BatchGenerator(x_file, y_file, batch_size, output_shape)
 
     data = tf.data.Dataset.from_generator(
         lambda: batch_gen,
         output_types=(tf.float32, tf.float32),
-        output_shapes=([None, *input_shape, 1], [None, *input_shape, 1]),
+        output_shapes=([None, *output_shape, 1], [None, *output_shape, 1]),
     )
     data = data.prefetch(3)
     return data

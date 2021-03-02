@@ -1,0 +1,10 @@
+colorama
+h5py
+hyperopt
+networkx
+numpy
+pandas
+ray[tune]
+scikit-image
+scipy
+tensorflow==2.3

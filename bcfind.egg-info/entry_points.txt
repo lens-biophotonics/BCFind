@@ -1,0 +1,5 @@
+[console_scripts]
+bcfind-evaluate = bcfind.evaluate_train:main
+bcfind-make-data = bcfind.make_training_data:main
+bcfind-train = bcfind.train:main
+

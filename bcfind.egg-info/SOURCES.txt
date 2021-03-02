@@ -1,0 +1,8 @@
+README.md
+setup.py
+bcfind.egg-info/PKG-INFO
+bcfind.egg-info/SOURCES.txt
+bcfind.egg-info/dependency_links.txt
+bcfind.egg-info/entry_points.txt
+bcfind.egg-info/requires.txt
+bcfind.egg-info/top_level.txt
