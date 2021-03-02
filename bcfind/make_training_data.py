@@ -139,7 +139,7 @@ def main():
     args = parse_args()
     conf = Configuration(args.config)
 
-    os.makedirs(conf.data.files_h5_dir, exist_ok=True)
+    os.makedirs(conf.exp.train_data_dir, exist_ok=True)
 
     tifnames = [f for f in os.listdir(conf.data.train_tif_dir)]
     n = len(tifnames)
@@ -196,7 +196,7 @@ def main():
     fy.close()
 
     all_fnames = np.array(all_fnames)
-    np.save(f"{conf.data.files_h5_dir}/file_names.npy", all_fnames)
+    np.save(f"{conf.exp_train_data_dir}/file_names.npy", all_fnames)
 
 
 if __name__ == "__main__":

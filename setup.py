@@ -5,7 +5,7 @@ with open("requirements.in") as f:
 
 setup(
     name="bcfind",
-    version=2.1,
+    version="2.1",
     description="BCFind is a tool for brain cells localization"
     "from large volumetric images",
     author="Curzio Checcucci, Toresano La Ode, Paolo Frasconi",
