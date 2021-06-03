@@ -1,6 +1,6 @@
 Metadata-Version: 1.0
 Name: bcfind
-Version: 2.1
+Version: 2.1.0
 Summary: BCFind is a tool for brain cells localizationfrom large volumetric images
 Home-page: https://github.com/lens-biophotonics/BCFind2.1
 Author: Curzio Checcucci, Toresano La Ode, Paolo Frasconi

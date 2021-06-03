@@ -1,10 +1,10 @@
 Dataset:
     name           : 'Task_5'
     basepath       : '/mnt/NASone/curzio/Data/Meta_SST_GT/Task_5'
-    data_shape     : !!python/tuple [480, 480, 160]
-    dim_resolution : !!python/tuple [.65, .65, 2.]
+    data_shape     : !!python/tuple [160, 480, 480]
+    dim_resolution : !!python/tuple [2., .65, .65]
 
-Preprocessing:
+PreProcessing:
     transpose         : !!python/tuple [2, 1, 0]
     flip_axis         : 1
     clip_threshold    : 4096
@@ -12,16 +12,22 @@ Preprocessing:
     downscale_factors : null
 
 Experiment:
-    name             : 'Task_5'
-    basepath         : '/mnt/NASone/curzio/Experiments/BCFind2.1'
-    input_shape      : !!python/tuple [160, 160, 80]
-    unet_epochs      : 3000
-    dog_iterations   : 30
-    batch_size       : 10
-    check_every      : 1
-    learning_rate    : 0.001
-    n_filters        : 32
-    e_size           : !!python/tuple [5, 5, 3]
-    e_stride         : !!python/tuple [2, 2, 2]
-    d_size           : !!python/tuple [5, 5, 3]
-    d_stride         : !!python/tuple [2, 2, 2]
+    name           : 'Task_5'
+    basepath       : '/mnt/NASone/curzio/Experiments/BCFind2.1'
+    input_shape    : !!python/tuple [160, 160, 80]
+    unet_epochs    : 3000
+    dog_iterations : 30
+    batch_size     : 10
+    check_every    : 1
+    learning_rate  : 0.001
+    n_filters      : 32
+    k_size         : !!python/tuple [5, 5, 3]
+    k_stride       : !!python/tuple [2, 2, 2]
+
+VirtualFusedVolume:
+    name        : 'FT85_AF_front'
+    config_file : '/mnt/NASone3/Ludo/FT85_AF_again_pw40_front_zip/stitch.yml'
+    sub_shape   : !!python/tuple [160, 480, 480]
+    sub_overlap : !!python/tuple [8, 20, 20]
+    mask_path   : '/mnt/NASone3/Ludo/FT85_AF_again_pw40_front_ds/FT85_AF_again_front_mask.tiff'
+    outdir      : '/mnt/NASone/curzio/Data/VFV_pred'

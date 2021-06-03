@@ -1,9 +1,9 @@
-h5py
-numpy
+h5py==2.10.0
+numpy==1.18.0
 pandas
 networkx
-scikit-image
-scipy
+scikit-image==0.16.2
+scipy==1.4.1
 colorama
 tensorflow==2.3
 ray[tune]

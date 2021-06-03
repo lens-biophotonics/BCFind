@@ -111,7 +111,7 @@ networkx==2.5
     #   -r requirements.in
     #   hyperopt
     #   scikit-image
-numpy==1.18.5
+numpy==1.18.0
     # via
     #   -r requirements.in
     #   h5py
@@ -123,12 +123,10 @@ numpy==1.18.5
     #   pandas
     #   pywavelets
     #   ray
-    #   scikit-image
     #   scipy
     #   tensorboard
     #   tensorboardx
     #   tensorflow
-    #   tifffile
 nvidia-ml-py3==7.352.0
     # via gpustat
 oauthlib==3.1.0
@@ -202,7 +200,7 @@ requests==2.25.1
     #   tensorboard
 rsa==4.7.2
     # via google-auth
-scikit-image==0.18.1
+scikit-image==0.16.2
     # via -r requirements.in
 scipy==1.4.1
     # via
@@ -244,8 +242,6 @@ tensorflow==2.3
     # via -r requirements.in
 termcolor==1.1.0
     # via tensorflow
-tifffile==2021.2.1
-    # via scikit-image
 tqdm==4.58.0
     # via hyperopt
 typing-extensions==3.7.4.3

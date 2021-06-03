@@ -131,7 +131,6 @@ def dog_fit(
         Y.append(y)
 
     if not os.path.exists(f"{train_data_dir}/unet_pred.h5"):
-        print(f"Saving U-Net predictions in {train_data_dir}/unet_pred.h5")
         X_emb = h5py.File(f"{train_data_dir}/unet_pred.h5", "w")
         X_emb.create_dataset(name="unet", data=np.zeros(X.shape), dtype=np.uint8)
         for i, x in enumerate(X):

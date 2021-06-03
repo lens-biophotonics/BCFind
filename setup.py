@@ -1,11 +1,11 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 with open("requirements.in") as f:
     install_requires = f.read().split()
 
 setup(
     name="bcfind",
-    version="2.1",
+    version="2.1.0",
     description="BCFind is a tool for brain cells localization"
     "from large volumetric images",
     author="Curzio Checcucci, Toresano La Ode, Paolo Frasconi",
@@ -13,6 +13,9 @@ setup(
     url="https://github.com/lens-biophotonics/BCFind2.1",
     # What does your project relate to?
     keywords="cnn, dog, cell localization, microscopy",
+    # You can just specify the packages manually here if your project is
+    # simple. Or you can use find_packages().
+    packages=find_packages(),
     # List run-time dependencies here.  These will be installed by pip when
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
