@@ -13,6 +13,7 @@ from zetastitcher import VirtualFusedVolume
 
 from bcfind.blob_dog import BlobDoG
 from bcfind.train import build_unet
+from bcfind.config_manager import Configuration
 from bcfind.utils import sigmoid, preprocessing
 
 
@@ -213,7 +214,8 @@ def parse_args():
 
 
 def main():
-    conf = parse_args()
+    args = parse_args()
+    conf = Configuration(args.config)
 
     # Preparing U-Net
     print("Loading UNet and DoG parameters...")
