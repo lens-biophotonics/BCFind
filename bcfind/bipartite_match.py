@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import networkx as nx
 
 
@@ -29,6 +30,7 @@ def bipartite_match(true_centers, pred_centers, max_distance, dim_resolution):
     """
     true_centers = np.array(true_centers)
     pred_centers = np.array(pred_centers)
+    dim_resolution = np.array(dim_resolution)
 
     G = nx.Graph()
 
@@ -63,8 +65,28 @@ def bipartite_match(true_centers, pred_centers, max_distance, dim_resolution):
 
     mate = nx.algorithms.matching.max_weight_matching(G, maxcardinality=False)
 
-    TP = len(mate)
-    FP = pred_centers.shape[0] - TP
-    FN = true_centers.shape[0] - TP
+    # get node names of TP, FP and FN
+    TP_p = [node for m in mate for node in m if node.startswith("p")]
+    TP_t = [node for m in mate for node in m if node.startswith("t")]
 
-    return G, mate, TP, FP, FN
+    F = list(set(G.nodes) - set(TP_p) - set(TP_t))
+    FP = [node for node in F if node.startswith("p")]
+    FN = [node for node in F if node.startswith("t")]
+
+    # create data frame of labeled centers
+    colnames = ["x", "y", "z", "label", "color"]
+    node_eval = []
+    for node in list(G.nodes):
+        if node in TP_p:
+            x, y, z = np.array(list(G.nodes[node].values())) / dim_resolution
+            node_eval.append([x, y, z, "TP", "green"])
+        if node in FP:
+            x, y, z = np.array(list(G.nodes[node].values())) / dim_resolution
+            node_eval.append([x, y, z, "FP", "red"])
+        if node in FN:
+            x, y, z = np.array(list(G.nodes[node].values())) / dim_resolution
+            node_eval.append([x, y, z, "FN", "orange"])
+
+    node_eval = pd.DataFrame(node_eval, columns=colnames)
+
+    return node_eval
