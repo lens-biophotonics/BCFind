@@ -1,10 +1,12 @@
 import os
+import h5py
 import json
 import argparse
 import numpy as np
 import pandas as pd
 import functools as ft
 import tensorflow as tf
+import concurrent.futures as cf
 
 from skimage import io
 
@@ -26,42 +28,20 @@ def parse_args():
     return args
 
 
-def predict_file(
-    unet,
-    dog,
-    img,
-    save_pred=False,
-    outfile=None,
-):
-    img_shape = img.shape
-    img = img[tf.newaxis, ..., tf.newaxis].astype("float32")
+def localize_and_evaluate(dog, x, y_file, max_match_dist, outdir):
+    f_name = y_file.split("/")[-1].split(".")[0]
+    y = pd.read_csv(open(y_file, "r"))[["#x", " y", " z"]]
 
-    if outfile is not None:
-        file_name = outfile.split("/")[-1].split(".")[0]
-        print(f"UNet prediction on file {file_name}...")
-    else:
-        print("UNet prediction...")
-    nn_pred = sigmoid(np.array(unet(img, training=False)).reshape(img_shape)) * 255
+    evaluation = dog.predict_and_evaluate(x, y, max_match_dist)
+    evaluation.to_csv(f"{outdir}/Pred_centers/pred_{y_file}")
 
-    if outfile is not None:
-        print(f"DoG prediction on file {file_name}...")
-    else:
-        print("DoG prediction...")
-    pred_centers = dog.predict(nn_pred)
+    TP = np.sum(evaluation.label == "TP")
+    FP = np.sum(evaluation.label == "FP")
+    FN = np.sum(evaluation.label == "FN")
 
-    if save_pred:
-        outdir = os.path.dirname(outfile)
-        os.makedirs(outdir, exist_ok=True)
-        np.save(outfile, pred_centers)
-
-    return pred_centers
-
-
-def evaluate_prediction(dog, predicted, gt_file_path):
-    true = pd.read_csv(open(gt_file_path, "r"))
-    true = true[["#x", " y", " z"]].dropna(0)
-    res = dog.evaluate(predicted, true)
-    return res
+    counts_df = pd.DataFrame([f_name, TP, FP, FN, TP + FP, y.shape[0]]).T
+    counts_df.columns = ["file", "TP", "FP", "FN", "tot_pred", "tot_true"]
+    return counts_df
 
 
 def main():
@@ -100,74 +80,92 @@ def main():
 
     # Predict and evaluate on train-set
     print(f"{opts.exp.name}: BCFind predictions on {opts.data.name} train-set.")
-    train_files = [
-        f
-        for f in os.listdir(opts.data.train_tif_dir)
-        if f.endswith(".tif") or f.endswith(".tiff")
-    ]
 
-    train_res = []
-    for f_name in train_files:
-        img = io.imread(f"{opts.data.train_tif_dir}/{f_name}")
-        img = preprocessing_fun(img)
-        out_f_name = f_name.split(".")[0]
+    f_names = np.load(f"{opts.exp.h5_dir}/file_names.npy")
+    with h5py.File(f"{opts.exp.h5_dir}/X_train.h5", "r") as fx:
+        X_train = fx["x"][()]
 
-        bcfind_pred = predict_file(
-            unet,
-            dog,
-            img,
-            True,
-            f"{opts.exp.predictions_dir}/Pred_centers/{out_f_name}.npy",
-        )
+    print(f"{opts.exp.name}: UNet predictions on {opts.data.name} train-set")
+    X_emb = unet.predict(X_train, batch_size=4)
+    X_emb = sigmoid(np.reshape(X_emb, X_train.shape)) * 255
 
-        print(f"Evaluating BCFind predictions on file {f_name}")
-        bcfind_res = evaluate_prediction(
-            dog, bcfind_pred, f"{opts.data.train_gt_dir}/{f_name}.marker"
-        )
-        train_res.append(bcfind_res)
+    print(
+        f"{opts.exp.name}: DoG predictions and evaluation on {opts.data.name} train-set"
+    )
+    n_cpu = 10
+    with cf.ThreadPoolExecutor(n_cpu) as pool:
+        futures = [
+            pool.submit(
+                localize_and_evaluate(
+                    x,
+                    f"{opts.data.train_gt_dir}/{f_name}.marker",
+                    10,
+                    opts.exp.predictions_dir,
+                )
+                for x, f_name in zip(X_train, f_names)
+            )
+        ]
+        res = [future.result() for future in cf.as_completed(futures)]
 
-    train_res = pd.concat(train_res)
-    train_res.index = train_files
-    train_res.to_csv(f"{opts.exp.predictions_dir}/train_eval.csv")
+    res = pd.concat(res)
+    res.to_csv(f"{opts.exp.predictions_dir}/train_eval.csv")
+    perf = metrics(res)
 
-    perf = metrics(train_res)
     print(f"{opts.exp.name}: Train-set of {opts.data.name} evaluated with {perf}")
     print("")
+    del X_train
 
     # Predict and evaluate on test-set
-    print(f"{opts.exp.name}: BCFind predictions on {opts.data.name} test-set.")
+    print(f"{opts.exp.name}: creating .h5 file for {opts.data.name} test-set.")
     test_files = [
         f
         for f in os.listdir(opts.data.test_tif_dir)
         if f.endswith(".tif") or f.endswith(".tiff")
     ]
 
-    test_res = []
-    for f_name in test_files:
+    fx = h5py.File(f"{opts.exp.h5_dir}/X_test.h5", "w")
+    fx.create_dataset(
+        "x", data=np.zeros((len(test_files), *opts.data.data_shape)), dtype=np.uint8
+    )
+
+    for i, f_name in enumerate(test_files):
         img = io.imread(f"{opts.data.test_tif_dir}/{f_name}")
         img = preprocessing_fun(img)
-        out_f_name = f_name.split(".")[0]
 
-        bcfind_pred = predict_file(
-            unet,
-            dog,
-            img,
-            True,
-            f"{opts.exp.predictions_dir}/Pred_centers/{out_f_name}.npy",
-        )
+        fx["x"][i, ...] = (img * 255).astype(np.uint8)
 
-        print("Evaluating BCFind test-set predictions")
-        bcfind_res = evaluate_prediction(
-            dog, bcfind_pred, f"{opts.data.test_gt_dir}/{f_name}.marker"
-        )
-        test_res.append(bcfind_res)
+    X_test = fx["x"][()]
+    fx.close()
 
-    test_res = pd.concat(test_res)
-    test_res.index = test_files
-    test_res.to_csv(f"{opts.exp.predictions_dir}/test_eval.csv")
+    print(f"{opts.exp.name}: UNet predictions on {opts.data.name} test-set")
+    X_emb = unet.predict(X_test, batch_size=4)
+    X_emb = sigmoid(np.reshape(X_emb, X_test.shape)) * 255
 
-    perf = metrics(test_res)
+    print(
+        f"{opts.exp.name}: DoG predictions and evaluation on {opts.data.name} test-set"
+    )
+    n_cpu = 10
+    with cf.ThreadPoolExecutor(n_cpu) as pool:
+        futures = [
+            pool.submit(
+                localize_and_evaluate(
+                    x,
+                    f"{opts.data.train_gt_dir}/{f_name}.marker",
+                    10,
+                    opts.exp.predictions_dir,
+                )
+                for x, f_name in zip(X_test, test_files)
+            )
+        ]
+        res = [future.result() for future in cf.as_completed(futures)]
+
+    res = pd.concat(res)
+    res.to_csv(f"{opts.exp.predictions_dir}/test_eval.csv")
+    perf = metrics(res)
+
     print(f"{opts.exp.name}: Test-set of {opts.data.name} evaluated with {perf}")
+    print("")
+    del X_test
 
 
 if __name__ == "__main__":

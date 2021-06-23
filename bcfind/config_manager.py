@@ -27,7 +27,7 @@ class Configuration:
         self.data.test_gt_dir = f"{self.data.basepath}/GT_files/Test"
 
         # Experiments folders
-        self.exp.train_data_dir = f"{self.exp.basepath}/{self.exp.name}/H5_files"
+        self.exp.h5_dir = f"{self.exp.basepath}/{self.exp.name}/H5_files"
         self.exp.unet_checkpoint_dir = (
             f"{self.exp.basepath}/{self.exp.name}/UNet_checkpoints"
         )

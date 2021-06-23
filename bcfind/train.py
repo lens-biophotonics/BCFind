@@ -5,11 +5,10 @@ import shutil
 import argparse
 import numpy as np
 import pandas as pd
-import functools as ft
 import tensorflow as tf
 
 from bcfind.data_generator import get_tf_data
-from bcfind.utils import preprocessing, sigmoid
+from bcfind.utils import sigmoid
 from bcfind.config_manager import Configuration
 from bcfind.unet import UNet
 from bcfind.blob_dog import BlobDoG
@@ -115,6 +114,7 @@ def dog_fit(
     train_data_dir,
     train_gt_dir,
     dim_resolution,
+    max_match_dist,
     iterations=30,
     logs_dir=None,
     checkpoint_dir=None,
@@ -158,6 +158,7 @@ def dog_fit(
     dog.fit(
         X_emb,
         Y,
+        max_match_dist,
         n_iter=iterations,
         logs_dir=logs_dir,
         checkpoint_dir=checkpoint_dir,
@@ -197,6 +198,7 @@ def main():
         conf.exp.train_data_dir,
         conf.data.train_gt_dir,
         conf.data.dim_resolution,
+        10.0,  # FIXME: not yet in .yaml configuration file
         conf.exp.dog_iterations,
         conf.exp.dog_logs_dir,
         conf.exp.dog_checkpoint_dir,
