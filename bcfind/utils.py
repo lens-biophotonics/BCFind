@@ -24,7 +24,11 @@ def metrics(df):
         f1 = 2.0 * prec * rec / (prec + rec)
     except ZeroDivisionError:
         f1 = 0.0
-    return {"prec": prec, "rec": rec, "f1": f1}
+    try:
+        acc = np.sum(df.TP) / np.sum(df.TP + df.FP + df.FN)
+    except ZeroDivisionError:
+        acc = 1.0
+    return {"prec": prec, "rec": rec, "f1": f1, "acc": acc}
 
 
 def pad(img, output_shape):
@@ -45,14 +49,19 @@ def preprocessing(
 ):
     if transpose is not None:
         img = np.transpose(img, transpose)
+
     if flip_axis is not None:
         img = np.flip(img, axis=flip_axis)
+
     if clip_threshold is not None:
         img[np.where(img > clip_threshold)] = clip_threshold
+
     if gamma_correction is not None:
-        img = np.power(img / img.max(), gamma_correction)
+        img = np.power(img / 8192, gamma_correction) * 8192
+
     if downscale_factors is not None:
         img = sk_trans.rescale(img, downscale_factors, anti_aliasing=False)
+
     if pad_output_shape is not None:
         img = pad(img, pad_output_shape)
 
