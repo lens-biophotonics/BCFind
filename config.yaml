@@ -7,22 +7,25 @@ Dataset:
 PreProcessing:
     transpose         : !!python/tuple [2, 1, 0]
     flip_axis         : 1
-    clip_threshold    : 4096
+    clip_threshold    : 8192
     gamma_correction  : 1.2
     downscale_factors : null
 
 Experiment:
     name           : 'Task_5'
     basepath       : '/mnt/NASone/curzio/Experiments/BCFind2.1'
-    input_shape    : !!python/tuple [160, 160, 80]
+    exclude_border : !!python/tuple [15, 15, 5]
+    val_fold       : '1/4'
     unet_epochs    : 3000
-    dog_iterations : 30
+    input_shape    : !!python/tuple [240, 240, 80]
     batch_size     : 10
     check_every    : 1
     learning_rate  : 0.001
     n_filters      : 32
     k_size         : !!python/tuple [5, 5, 3]
     k_stride       : !!python/tuple [2, 2, 2]
+    dog_iterations : 30
+    max_match_dist : 10
 
 VirtualFusedVolume:
     name        : 'FT85_AF_front'

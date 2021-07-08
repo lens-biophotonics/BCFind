@@ -12,9 +12,14 @@ from bcfind.utils import metrics
 
 
 class BlobDoG:
-    def __init__(self, n_dim=2, dim_resolution=[1.0, 1.0]):
+    def __init__(self, n_dim=2, dim_resolution=[1.0, 1.0], exclude_border=None):
         self.D = n_dim
         self.dim_resolution = np.array(dim_resolution)
+        self.exclude_border = exclude_border
+        if exclude_border is None:
+            self.exclude_border = False
+
+        # Default parameter settings
         self.min_rad = 7
         self.max_rad = 15
         self.sigma_ratio = 1.4
@@ -50,6 +55,7 @@ class BlobDoG:
                 sigma_ratio=self.sigma_ratio,
                 overlap=self.overlap,
                 threshold=self.threshold,
+                exclude_border=self.exclude_border,
             )
         else:
             min_sigma = (parameters["min_rad"] / self.dim_resolution) / np.sqrt(self.D)
@@ -66,9 +72,9 @@ class BlobDoG:
         return centers
 
     def evaluate(self, y_pred, y, max_match_dist, evaluation_type="complete"):
-        """6 possible evaluation types are admitted: /'complete/' for single centroid
-        labelling, /'counts/' for counts of TP, FP, FN, total predicted and total true,
-        /'f1/', /'acc/', /'prec/' or /'rec/' for specific metric evaluation.
+        """Admitted evaluation types: `complete` for single centroid
+        labelling, `counts` for counts of TP, FP, FN, total predicted and total true,
+        `f1`, `acc`, `prec` or `rec` for specific metric evaluation.
         """
         admitted_types = ["complete", "counts", "f1", "acc", "prec", "rec"]
         assert (
@@ -159,7 +165,6 @@ class BlobDoG:
         logs_dir=None,
         checkpoint_dir=None,
         n_cpu=10,
-        n_gpu=1,
         verbose=0,
     ):
         obj_wrapper = ft.partial(

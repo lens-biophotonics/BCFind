@@ -7,11 +7,12 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from bcfind.data_generator import get_tf_data
-from bcfind.utils import sigmoid
 from bcfind.config_manager import Configuration
-from bcfind.unet import UNet
+from bcfind.data_generator import get_tf_data
+from bcfind.losses import FramedCrossentropy3D
 from bcfind.blob_dog import BlobDoG
+from bcfind.utils import sigmoid
+from bcfind.unet import UNet
 
 
 def parse_args():
@@ -25,7 +26,7 @@ def parse_args():
     return args
 
 
-def build_unet(n_filters, k_size, k_stride, input_shape, learning_rate):
+def build_unet(n_filters, k_size, k_stride, input_shape, learning_rate, exclude_border):
     model = UNet(
         n_filters,
         k_size,
@@ -33,9 +34,13 @@ def build_unet(n_filters, k_size, k_stride, input_shape, learning_rate):
     )
     model.build((None, *input_shape, 1))
 
-    loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+    if exclude_border is not None:
+        loss = FramedCrossentropy3D(exclude_border, input_shape, from_logits=True)
+    else:
+        loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+
     optimizer = tf.keras.optimizers.Adam(learning_rate)
-    metrics = ["accuracy", "mse"]
+    metrics = ["accuracy"]
 
     model.compile(
         loss=loss,
@@ -62,8 +67,8 @@ def get_callbacks(checkpoint_dir, tensorboard_dir, check_every):
 
     TB_callback = tf.keras.callbacks.TensorBoard(
         tensorboard_dir,
-        update_freq=check_every,
-        write_graph=False,
+        update_freq="epoch",
+        profile_batch=0,
     )
     return [MC_callback, TB_callback]
 
@@ -73,8 +78,10 @@ def unet_fit(
     y_file,
     batch_size,
     input_shape,
+    val_fold,
     epochs,
     learning_rate,
+    exclude_border,
     n_filters,
     k_size,
     k_stride,
@@ -82,8 +89,7 @@ def unet_fit(
     tensorboard_dir,
     check_every,
 ):
-    print("Preparing data and building model for U-Net training")
-    data = get_tf_data(x_file, y_file, batch_size, input_shape)
+    print("Building U-Net model")
     callbacks = get_callbacks(
         checkpoint_dir,
         tensorboard_dir,
@@ -96,16 +102,34 @@ def unet_fit(
         k_stride,
         input_shape,
         learning_rate,
+        exclude_border,
     )
     unet.summary()
 
-    print("U-Net training")
-    unet.fit(
-        data,
-        epochs=epochs,
-        callbacks=callbacks,
-    )
+    if val_fold is not None:
+        print("Loading training and validation data")
+        train, val = get_tf_data(x_file, y_file, batch_size, input_shape, val_fold)
 
+        print("U-Net model fitting")
+        unet.fit(
+            train,
+            epochs=epochs,
+            callbacks=callbacks,
+            validation_data=val,
+            verbose=1,
+            # workers=15,
+        )
+    else:
+        print("Loading training data")
+        train = get_tf_data(x_file, y_file, batch_size, input_shape)
+
+        print("U-Net model fitting")
+        unet.fit(
+            train,
+            epochs=epochs,
+            callbacks=callbacks,
+            verbose=1,
+        )
     return unet
 
 
@@ -114,6 +138,7 @@ def dog_fit(
     train_data_dir,
     train_gt_dir,
     dim_resolution,
+    exclude_border,
     max_match_dist,
     iterations=30,
     logs_dir=None,
@@ -124,10 +149,21 @@ def dog_fit(
     f_names = np.load(f"{train_data_dir}/file_names.npy")
     with h5py.File(f"{train_data_dir}/X_train.h5", "r") as fx:
         X = fx["x"][()]
+    data_shape = X[0].shape
+
     for name in f_names:
         print(f"Loading file {train_gt_dir}/{name}.marker")
         y = pd.read_csv(open(f"{train_gt_dir}/{name}.marker", "r"))
         y = y[["#x", " y", " z"]].dropna(0)
+
+        if exclude_border is not None:
+            y = y.drop(y[y["#x"] <= exclude_border[0]].index)
+            y = y.drop(y[y["#x"] >= data_shape[0] - exclude_border[0]].index)
+            y = y.drop(y[y[" y"] <= exclude_border[1]].index)
+            y = y.drop(y[y[" y"] >= data_shape[1] - exclude_border[1]].index)
+            y = y.drop(y[y[" z"] <= exclude_border[2]].index)
+            y = y.drop(y[y[" z"] >= data_shape[2] - exclude_border[2]].index)
+
         Y.append(y)
 
     if not os.path.exists(f"{train_data_dir}/unet_pred.h5"):
@@ -154,7 +190,7 @@ def dog_fit(
     if os.path.exists(checkpoint_dir):
         shutil.rmtree(checkpoint_dir, ignore_errors=True)
 
-    dog = BlobDoG(Y[0].shape[1], dim_resolution)
+    dog = BlobDoG(Y[0].shape[1], dim_resolution, exclude_border)
     dog.fit(
         X_emb,
         Y,
@@ -163,18 +199,21 @@ def dog_fit(
         logs_dir=logs_dir,
         checkpoint_dir=checkpoint_dir,
         n_cpu=10,
-        n_gpu=1,
         verbose=1,
     )
     return dog
 
 
 def main():
+    import os
+
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
     args = parse_args()
     conf = Configuration(args.config)
 
-    x_file = f"{conf.exp.train_data_dir}/X_train.h5"
-    y_file = f"{conf.exp.train_data_dir}/Y_train.h5"
+    x_file = f"{conf.exp.h5_dir}/X_train.h5"
+    y_file = f"{conf.exp.h5_dir}/Y_train.h5"
 
     # Unet training
     unet = unet_fit(
@@ -182,8 +221,10 @@ def main():
         y_file,
         conf.exp.batch_size,
         conf.exp.input_shape,
+        conf.exp.val_fold,
         conf.exp.unet_epochs,
         conf.exp.learning_rate,
+        conf.exp.exclude_border,
         conf.exp.n_filters,
         conf.exp.k_size,
         conf.exp.k_stride,
@@ -195,10 +236,11 @@ def main():
     # DoG training
     dog = dog_fit(
         unet,
-        conf.exp.train_data_dir,
+        conf.exp.h5_dir,
         conf.data.train_gt_dir,
         conf.data.dim_resolution,
-        10.0,  # FIXME: not yet in .yaml configuration file
+        conf.exp.exclude_border,
+        conf.exp.max_match_dist,
         conf.exp.dog_iterations,
         conf.exp.dog_logs_dir,
         conf.exp.dog_checkpoint_dir,
