@@ -28,12 +28,15 @@ def parse_args():
     return args
 
 
-def localize_and_evaluate(dog, x, y_file, max_match_dist, outdir):
+def localize_and_evaluate(dog, x, y_file, max_match_dist, outdir=None):
     f_name = y_file.split("/")[-1].split(".")[0]
     y = pd.read_csv(open(y_file, "r"))[["#x", " y", " z"]]
 
     evaluation = dog.predict_and_evaluate(x, y, max_match_dist)
-    evaluation.to_csv(f"{outdir}/Pred_centers/pred_{y_file}")
+    if outdir is not None:
+        os.makedirs(outdir, exist_ok=True)
+        os.makedirs(f"{outdir}/Pred_centers", exist_ok=True)
+        evaluation.to_csv(f"{outdir}/Pred_centers/pred_{f_name}.marker")
 
     TP = np.sum(evaluation.label == "TP")
     FP = np.sum(evaluation.label == "FP")
@@ -45,8 +48,13 @@ def localize_and_evaluate(dog, x, y_file, max_match_dist, outdir):
 
 
 def main():
+    import os
+
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
     args = parse_args()
     opts = Configuration(args.config)
+    BATCH_SIZE = 2
 
     # Build UNet and load weights
     unet = build_unet(
@@ -79,15 +87,24 @@ def main():
     )
 
     # Predict and evaluate on train-set
-    print(f"{opts.exp.name}: BCFind predictions on {opts.data.name} train-set.")
-
     f_names = np.load(f"{opts.exp.h5_dir}/file_names.npy")
     with h5py.File(f"{opts.exp.h5_dir}/X_train.h5", "r") as fx:
-        X_train = fx["x"][()]
+        X_train = fx["x"][()].astype("float32")
+    data = (
+        tf.data.Dataset.from_tensor_slices(X_train[..., np.newaxis] / 255)
+        .batch(BATCH_SIZE)
+        .prefetch(2)
+    )
+
+    del X_train
 
     print(f"{opts.exp.name}: UNet predictions on {opts.data.name} train-set")
-    X_emb = unet.predict(X_train, batch_size=4)
-    X_emb = sigmoid(np.reshape(X_emb, X_train.shape)) * 255
+    X_emb = []
+    for batch in data:
+        pred_batch = unet.predict(batch)
+        pred_batch = sigmoid(pred_batch) * 255
+        for pred in pred_batch:
+            X_emb.append(pred.reshape(opts.data.data_shape))
 
     print(
         f"{opts.exp.name}: DoG predictions and evaluation on {opts.data.name} train-set"
@@ -96,14 +113,14 @@ def main():
     with cf.ThreadPoolExecutor(n_cpu) as pool:
         futures = [
             pool.submit(
-                localize_and_evaluate(
-                    x,
-                    f"{opts.data.train_gt_dir}/{f_name}.marker",
-                    10,
-                    opts.exp.predictions_dir,
-                )
-                for x, f_name in zip(X_train, f_names)
+                localize_and_evaluate,
+                dog,
+                x,
+                f"{opts.data.train_gt_dir}/{f_name}.marker",
+                10,
+                opts.exp.predictions_dir,
             )
+            for x, f_name in zip(X_emb, f_names)
         ]
         res = [future.result() for future in cf.as_completed(futures)]
 
@@ -113,7 +130,6 @@ def main():
 
     print(f"{opts.exp.name}: Train-set of {opts.data.name} evaluated with {perf}")
     print("")
-    del X_train
 
     # Predict and evaluate on test-set
     print(f"{opts.exp.name}: creating .h5 file for {opts.data.name} test-set.")
@@ -134,12 +150,22 @@ def main():
 
         fx["x"][i, ...] = (img * 255).astype(np.uint8)
 
-    X_test = fx["x"][()]
+    X_test = fx["x"][()].astype("float32")
     fx.close()
+    data = (
+        tf.data.Dataset.from_tensor_slices(X_test[..., np.newaxis] / 255)
+        .batch(BATCH_SIZE)
+        .prefetch(2)
+    )
+    del X_test
 
     print(f"{opts.exp.name}: UNet predictions on {opts.data.name} test-set")
-    X_emb = unet.predict(X_test, batch_size=4)
-    X_emb = sigmoid(np.reshape(X_emb, X_test.shape)) * 255
+    X_emb = []
+    for batch in data:
+        pred_batch = unet.predict(batch)
+        pred_batch = sigmoid(pred_batch) * 255
+        for pred in pred_batch:
+            X_emb.append(pred.reshape(opts.data.data_shape))
 
     print(
         f"{opts.exp.name}: DoG predictions and evaluation on {opts.data.name} test-set"
@@ -148,14 +174,14 @@ def main():
     with cf.ThreadPoolExecutor(n_cpu) as pool:
         futures = [
             pool.submit(
-                localize_and_evaluate(
-                    x,
-                    f"{opts.data.train_gt_dir}/{f_name}.marker",
-                    10,
-                    opts.exp.predictions_dir,
-                )
-                for x, f_name in zip(X_test, test_files)
+                localize_and_evaluate,
+                dog,
+                x,
+                f"{opts.data.test_gt_dir}/{f_name}.marker",
+                10,
+                opts.exp.predictions_dir,
             )
+            for x, f_name in zip(X_emb, test_files)
         ]
         res = [future.result() for future in cf.as_completed(futures)]
 
@@ -165,7 +191,6 @@ def main():
 
     print(f"{opts.exp.name}: Test-set of {opts.data.name} evaluated with {perf}")
     print("")
-    del X_test
 
 
 if __name__ == "__main__":
