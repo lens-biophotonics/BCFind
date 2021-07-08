@@ -28,9 +28,21 @@ def parse_args():
     return args
 
 
-def localize_and_evaluate(dog, x, y_file, max_match_dist, outdir=None):
+def localize_and_evaluate(
+    dog, x, y_file, max_match_dist, exclude_border=None, outdir=None
+):
     f_name = y_file.split("/")[-1].split(".")[0]
     y = pd.read_csv(open(y_file, "r"))[["#x", " y", " z"]]
+
+    if exclude_border is not None:
+        data_shape = x.shape
+
+        y = y.drop(y[y["#x"] <= exclude_border[0]].index)
+        y = y.drop(y[y["#x"] >= data_shape[0] - exclude_border[0]].index)
+        y = y.drop(y[y[" y"] <= exclude_border[1]].index)
+        y = y.drop(y[y[" y"] >= data_shape[1] - exclude_border[1]].index)
+        y = y.drop(y[y[" z"] <= exclude_border[2]].index)
+        y = y.drop(y[y[" z"] >= data_shape[2] - exclude_border[2]].index)
 
     evaluation = dog.predict_and_evaluate(x, y, max_match_dist)
     if outdir is not None:
@@ -67,7 +79,9 @@ def main():
     unet.load_weights(f"{opts.exp.unet_checkpoint_dir}/model.h5")
 
     # Build DoG with trained parameters
-    dog = BlobDoG(len(opts.data.data_shape), opts.data.dim_resolution)
+    dog = BlobDoG(
+        len(opts.data.data_shape), opts.data.dim_resolution, opts.exp.exclude_border
+    )
     try:
         dog_par = json.load(open(f"{opts.exp.dog_checkpoint_dir}/parameters.json"))
         dog.set_parameters(dog_par)
