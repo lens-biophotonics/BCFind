@@ -49,21 +49,15 @@ class BatchGenerator(tf.keras.utils.Sequence):
             yield item
 
 
-def val_split(X, Y, val_fold):
+def get_train_val_idx(n, val_fold):
     k_folds = int(val_fold.split("/")[-1])
     fold_idx = int(val_fold.split("/")[0])
-    n = X.shape[0]
     val_size = n // k_folds
 
     val_idx = list(np.arange((fold_idx - 1) * val_size, fold_idx * val_size))
     train_idx = list(set(np.arange(n)) - set(val_idx))
 
-    X_val = X[val_idx, ...]
-    Y_val = Y[val_idx, ...]
-
-    X_train = X[train_idx, ...]
-    Y_train = Y[train_idx, ...]
-    return X_train, Y_train, X_val, Y_val
+    return train_idx, val_idx
 
 
 def get_tf_data(x_file, y_file, batch_size, output_shape, val_fold=None):
@@ -76,9 +70,11 @@ def get_tf_data(x_file, y_file, batch_size, output_shape, val_fold=None):
         Y = fy["y"][()]
 
     if val_fold is not None:
-        X_train, Y_train, X_val, Y_val = val_split(X, Y, val_fold)
+        train_idx, val_idx = get_train_val_idx(X.shape[0], val_fold)
 
-        train_gen = BatchGenerator(X_train, Y_train, batch_size, output_shape)
+        train_gen = BatchGenerator(
+            X[train_idx, ...], Y[train_idx, ...], batch_size, output_shape
+        )
         train = tf.data.Dataset.from_generator(
             lambda: train_gen,
             output_types=(tf.float32, tf.float32),
@@ -86,7 +82,9 @@ def get_tf_data(x_file, y_file, batch_size, output_shape, val_fold=None):
         )
         train = train.prefetch(3)
 
-        val_gen = BatchGenerator(X_val, Y_val, batch_size, output_shape)
+        val_gen = BatchGenerator(
+            X[val_idx, ...], Y[val_idx, ...], batch_size, output_shape
+        )
         val = tf.data.Dataset.from_generator(
             lambda: val_gen,
             output_types=(tf.float32, tf.float32),
