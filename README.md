@@ -31,42 +31,60 @@ A file .yaml sets the experiment specifications: as the data path, the resolutio
 Here the layout:
 ```yaml
  Dataset:
-    name           : 'my_data_name'
-    basepath       : '/path/to/data/folders'
+    name           : 'my_data'
+    basepath       : '/path/to/my/data/folders'
     data_shape     : !!python/tuple [160, 480, 480]
     dim_resolution : !!python/tuple [2., .65, .65]
+    marker_columns : !!python/tuple [' z', ' y', '#x']
+
+Experiment:
+    name           : 'my_exp'
+    basepath       : '/path/to/my/experiment/outputs'
 
 PreProcessing:
     transpose         : !!python/tuple [2, 1, 0]
-    flip_axis         : null
+    flip_axis         : 1
     clip_threshold    : 8192
     gamma_correction  : 1.2
-    downscale_factors : null
+    downscale         : null
+    normalization     : 'input'
+    standardization   : null
 
-Experiment:
-    name           : 'my_exp_name'
-    basepath       : '/path/to/experiment/outputs'
-    exclude_border : !!python/tuple [10, 10, 3]
+DataAugmentation:
+    augment      : true
+    gamma        : !!python/tuple [0.5, 1.5]
+    contrast     : null
+    brightness   : !!python/tuple [-1, 1]
+    zoom         : !!python/tuple [1.0, 1.8]
+    gauss_filter : !!python/tuple [0.2, 3]
+    noise        : !!python/tuple [0.2, 3]
+
+UNet:
     val_fold       : '1/4'
-    unet_epochs    : 1500
+    val_seed       : 123
     input_shape    : !!python/tuple [240, 240, 80]
+    exclude_border : !!python/tuple [10, 10, 3]
+    epochs         : 3000
     batch_size     : 10
-    check_every    : 1
     learning_rate  : 0.001
     n_filters      : 32
     k_size         : !!python/tuple [5, 5, 3]
     k_stride       : !!python/tuple [2, 2, 2]
-    dog_iterations : 30
+
+DoG:
+    iterations     : 40
+    exclude_border : !!python/tuple [10, 10, 3]
     max_match_dist : 10
+    n_cpu          : 1
 
 VirtualFusedVolume:
-    name        : 'vfv_name'
-    config_file : '/path/to/vfv/stitch.yml'
-    sub_shape   : !!python/tuple [160, 480, 480]
-    sub_overlap : !!python/tuple [8, 20, 20]
-    mask_path   : '/path/to/vfv/mask/file_name.tiff'
-    outdir      : '/path/to/predictions/outputs'
-
+    name           : 'vfv_name'
+    config_file    : '/path/to/vfv/stitch.yml'
+    sub_shape      : !!python/tuple [160, 480, 480]
+    sub_overlap    : !!python/tuple [8, 20, 20]
+    mask_path      : '/path/to/mask.tiff'
+    mask_downscale : !!python/tuple [3, 3, 3]
+    outdir         : '/path/to/vfv/predictions/folder'
 ```
 <br>
 
