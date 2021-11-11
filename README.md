@@ -52,12 +52,12 @@ PreProcessing:
 
 DataAugmentation:
     augment      : true
-    gamma        : !!python/tuple [0.5, 1.5]
+    gamma        : !!python/tuple [0.5, 1.8]
     contrast     : null
-    brightness   : !!python/tuple [-1, 1]
-    zoom         : !!python/tuple [1.0, 1.8]
-    gauss_filter : !!python/tuple [0.2, 3]
-    noise        : !!python/tuple [0.2, 3]
+    brightness   : !!python/tuple [-0.1, 0.1]
+    zoom         : !!python/tuple [1.0, 1.3]
+    gauss_filter : !!python/tuple [0.5, 2]
+    noise        : !!python/tuple [0.05, 0.15]
 
 UNet:
     val_fold       : '1/4'
