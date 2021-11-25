@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import functools as ft
 
+from pathlib import Path
+
 from skimage import io
 from queue import Queue
 from zetastitcher import VirtualFusedVolume
@@ -221,18 +223,19 @@ def main():
     # Preparing U-Net
     print("Loading UNet and DoG parameters...")
     unet = build_unet(
-        conf.exp.n_filters,
-        conf.exp.k_size,
-        conf.exp.k_stride,
-        conf.vfv.sub_shape,
-        conf.exp.learning_rate,
+        n_filters=conf.unet.n_filters,
+        k_size=conf.unet.k_size,
+        k_stride=conf.unet.k_stride,
+        input_shape=conf.vfv.sub_shape,
+        learning_rate=conf.unet.learning_rate,
+        exclude_border=conf.unet.exclude_border,
     )
-    unet.load_weights(f"{conf.exp.unet_checkpoint_dir}/model.h5")
+    unet.load_weights(Path(conf.unet.checkpoint_dir) / 'model.h5')
 
     # Preparing DoG
     dog = BlobDoG(len(conf.vfv.sub_shape), conf.data.dim_resolution)
-    dog_par_file = f"{conf.exp.dog_checkpoint_dir}/parameters.json"
-    if os.isFile(dog_par_file):
+    dog_par_file = Path(conf.dog.checkpoint_dir) / "parameters.json"
+    if dog_par_file.exists():
         dog_par = json.load(open(dog_par_file))
         dog.set_parameters(dog_par)
     else:
@@ -257,7 +260,7 @@ def main():
         flip_axis=None,
         clip_threshold=conf.preproc.clip_threshold,
         gamma_correction=conf.preproc.gamma_correction,
-        downscale_factors=conf.preproc.downscale_factors,
+        downscale=conf.preproc.downscale,
         pad_output_shape=output_shape,
     )
 
