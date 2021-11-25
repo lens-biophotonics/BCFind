@@ -8,3 +8,4 @@ colorama
 tensorflow==2.3
 hyperopt
 numba
+zetastitcher
