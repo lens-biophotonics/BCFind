@@ -12,7 +12,7 @@ from bcfind.config_manager import Configuration
 from bcfind.data_generator import get_tf_data, Scaler
 from bcfind.losses import FramedCrossentropy3D
 from bcfind.blob_dog import BlobDoG
-from bcfind.utils import sigmoid, remove_border_points_from_df
+from bcfind.utils import sigmoid
 from bcfind.unet import UNet
 
 
@@ -129,8 +129,6 @@ def fit_dog(
 
 
 def main():
-    # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
     args = parse_args()
     conf = Configuration(args.config)
 
