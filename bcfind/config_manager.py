@@ -1,13 +1,25 @@
 import yaml
 import numpy as np
 
-
-# Class to acces dictionary keys as they were attributes
+# Class to acces dictionary keys as if they were attributes
 # (some properties and methods of dictionary class are lost)
-class AttrDict(dict):
-    def __init__(self, *args, **kwargs):
-        super(AttrDict, self).__init__(*args, **kwargs)
-        self.__dict__ = self
+class AttrDict:
+    def __init__(self, d):
+        self.d = d
+
+    def __getattr__(self, item):
+        return self.d[item]
+
+
+attr_to_yaml_key = {
+    'data': 'Dataset',
+    'exp': 'Experiment',
+    'preproc': 'PreProcessing',
+    'data_aug': 'DataAugmentation',
+    'unet': 'UNet',
+    'dog': 'DoG',
+    'vfv': 'VirtualFusedVolume',
+}
 
 
 class Configuration:
@@ -15,22 +27,20 @@ class Configuration:
         with open(yaml_file) as f:
             conf = yaml.load(f, Loader=yaml.FullLoader)
 
-        self.data = AttrDict(conf["Dataset"])
-        self.exp = AttrDict(conf["Experiment"])
-        self.preproc = AttrDict(conf["PreProcessing"])
-        self.data_aug = AttrDict(conf["DataAugmentation"])
-        self.unet = AttrDict(conf["UNet"])
-        self.dog = AttrDict(conf["DoG"])
-        self.vfv = AttrDict(conf["VirtualFusedVolume"])
+        for k, v in attr_to_yaml_key.items():
+            try:
+                setattr(self, k, AttrDict(conf[v]))
+            except KeyError:
+                pass
 
-        # Data configuration
-        self.data.data_shape = np.array(self.data.data_shape)
-        self.data.dim_resolution = np.array(self.data.dim_resolution)
+        if self.data:
+            self.data.data_shape = np.array(self.data.data_shape)
+            self.data.dim_resolution = np.array(self.data.dim_resolution)
 
-        self.data.train_tif_dir = f"{self.data.basepath}/Tiff_files/Train"
-        self.data.train_gt_dir = f"{self.data.basepath}/GT_files/Train"
-        self.data.test_tif_dir = f"{self.data.basepath}/Tiff_files/Test"
-        self.data.test_gt_dir = f"{self.data.basepath}/GT_files/Test"
+            self.data.train_tif_dir = f"{self.data.basepath}/Tiff_files/Train"
+            self.data.train_gt_dir = f"{self.data.basepath}/GT_files/Train"
+            self.data.test_tif_dir = f"{self.data.basepath}/Tiff_files/Test"
+            self.data.test_gt_dir = f"{self.data.basepath}/GT_files/Test"
 
         if self.preproc.transpose is not None:
             self.data.data_shape = np.array(
@@ -86,6 +96,9 @@ class Configuration:
         self.vfv.outdir = f"{self.vfv.outdir}/{self.vfv.name}"
         self.vfv.pred_outdir = f"{self.vfv.outdir}/stack_pred"
 
+    def __getattr__(self, item):
+        return None
+
 
 if __name__ == "__main__":
-    print(Configuration("config.yaml").data)
+    print(Configuration("../config.yaml").data.data_shape)
