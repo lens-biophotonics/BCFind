@@ -99,10 +99,9 @@ def fit_unet(
 
 
 def fit_dog(
+    dog,
     X,
     Y,
-    dim_resolution,
-    exclude_border,
     max_match_dist,
     iterations=30,
     logs_dir=None,
@@ -114,7 +113,6 @@ def fit_dog(
     if os.path.exists(checkpoint_dir):
         shutil.rmtree(checkpoint_dir, ignore_errors=True)
 
-    dog = BlobDoG(len(X[0].shape), dim_resolution, exclude_border)
     dog.fit(
         X,
         Y,
@@ -151,18 +149,17 @@ def main():
 
     print("Building data generator")
     data = get_tf_data(
-        X,
-        Y,
-        conf.unet.batch_size,
-        conf.unet.input_shape,
-        conf.unet.val_fold,
-        conf.unet.val_seed,
-        conf.data_aug.augment,
-        conf.data_aug.deform,
-        conf.data_aug.brightness,
-        conf.data_aug.gamma,
-        conf.data_aug.contrast,
-        conf.data_aug.zoom,
+        X=X,
+        Y=Y,
+        batch_size=conf.unet.batch_size,
+        output_shape=conf.unet.input_shape,
+        val_fold=conf.unet.val_fold,
+        val_seed=conf.unet.val_seed,
+        augment=conf.data_aug.augment,
+        brightness=conf.data_aug.brightness,
+        gauss_filter=conf.data_aug.gamma,
+        contrast=conf.data_aug.contrast,
+        zoom=conf.data_aug.zoom,
     )
 
     if isinstance(conf.unet.val_fold, str):
@@ -183,11 +180,12 @@ def main():
     unet.summary()
 
     unet = fit_unet(
-        train,
-        val,
-        conf.unet.epochs,
-        conf.unet.checkpoint_dir,
-        conf.unet.tensorboard_dir,
+        unet=unet,
+        train_data=train,
+        val_data=val,
+        epochs=conf.unet.epochs,
+        checkpoint_dir=conf.unet.checkpoint_dir,
+        tensorboard_dir=conf.unet.tensorboard_dir,
     )
 
     # DoG training
@@ -217,17 +215,16 @@ def main():
     with h5py.File(pred_file, "r") as fx:
         X = fx["y_hat"][()]
 
+    dog = BlobDoG(len(X[0].shape), conf.data.dim_resolution, conf.dog.exclude_border)
     nb.cuda.close()
 
     dog = fit_dog(
-        X,
-        Y,
-        conf.data.dim_resolution,
-        conf.dog.exclude_border,
-        conf.dog.max_match_dist,
-        conf.dog.iterations,
-        conf.dog.checkpoint_dir,
-        conf.dog.n_cpu,
+        dog=dog,
+        X=X,
+        Y=Y,
+        max_match_dist=conf.dog.max_match_dist,
+        iterations=conf.dog.iterations,
+        checkpoint_dir=conf.dog.checkpoint_dir,
     )
 
     dog_par = dog.get_parameters()
