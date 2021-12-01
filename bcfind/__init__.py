@@ -1,4 +1,4 @@
-from bcfind.unet import UNet
+from bcfind.unet import get_model
 from bcfind.blob_dog import BlobDoG
 from bcfind.make_training_data import make_train_data, get_target
 from bcfind.data_generator import BatchGenerator, Scaler, get_tf_data

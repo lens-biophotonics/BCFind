@@ -1,156 +1,90 @@
 import tensorflow as tf
 
 
-# Encoder block
-class ConvBlock(tf.keras.layers.Layer):
-    def __init__(self, n_filters, conv_size, conv_stride, **kwargs):
-        """TODO describe function.
+def _combine_layers(input_layer, layerlist: list):
+    """
+    combines a list of sequential layers into a single one
 
-        :param n_filters:
-        :type n_filters:
-        :param conv_size:
-        :type conv_size:
-        :param conv_stride:
-        :type conv_stride:
-        :returns:
+    Parameters
+    ----------
+    input_layer : keras layer
+        input_layer
+    layerlist : list
+        list of layers to stack
 
-        """
-        super(ConvBlock, self).__init__(**kwargs)
-        self.n_filters = n_filters
-        self.conv_size = conv_size
-        self.conv_stride = conv_stride
+    Returns
+    -------
+    combined_layer : keras_layer
+        stacked layers
+    """
 
-        self.conv3D = tf.keras.layers.Conv3D(
-            filters=n_filters,
-            kernel_size=conv_size,
-            strides=conv_stride,
-            padding="same",
-        )
-        self.batch_norm = tf.keras.layers.BatchNormalization()
-        self.relu = tf.keras.layers.Activation("relu")
+    layer_in = input_layer
+    for layerfunc in layerlist:
+        layer_in = layerfunc(layer_in)
 
-    def call(self, inputs, training=None):
-        """TODO describe function
-
-        :param inputs:
-        :type inputs:
-        :param training:
-        :type training:
-        :returns:
-
-        """
-        h = self.conv3D(inputs)
-        h = self.batch_norm(h, training=training)
-        h = self.relu(h)
-        return h
-
-    def get_config(self):
-        """TODO describe function
-
-        :returns:
-
-        """
-        config = super(ConvBlock, self).get_config()
-        config.update(
-            {
-                "n_filters": self.n_filters,
-                "conv_size": self.conv_size,
-                "conv_stride": self.conv_stride,
-            }
-        )
-        return config
-
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
+    return layer_in
 
 
-# Decoder block
-class InvConvBlock(tf.keras.layers.Layer):
-    def __init__(self, n_filters, conv_size, conv_stride, activation, **kwargs):
-        super(InvConvBlock, self).__init__(**kwargs)
-        self.n_filters = n_filters
-        self.conv_size = conv_size
-        self.conv_stride = conv_stride
-        self.activation = activation
+def _encoder_block(input_layer, n_filters, conv_size, conv_stride):
+    conv3D = tf.keras.layers.Conv3D(
+        filters=n_filters,
+        kernel_size=conv_size,
+        strides=conv_stride,
+        padding='same',
+    )
+    batch_norm = tf.keras.layers.BatchNormalization()
+    relu = tf.keras.layers.Activation('relu')
 
-        self.conv3D_T = tf.keras.layers.Conv3DTranspose(
-            filters=n_filters,
-            kernel_size=conv_size,
-            strides=conv_stride,
-            padding="same",
-        )
-        self.batch_norm = tf.keras.layers.BatchNormalization()
-        self.activ = tf.keras.layers.Activation(activation)
-        self.concat = tf.keras.layers.Concatenate(axis=-1)
+    layer_list = [
+        conv3D,
+        batch_norm,
+        relu,
+    ]
 
-    def call(self, inputs, skip_connect=None, training=None):
-        h = self.conv3D_T(inputs)
-        h = self.batch_norm(h, training=training)
-        h = self.activ(h)
-        if skip_connect is not None:
-            h = self.concat([h, skip_connect])
-        return h
-
-    def get_config(self):
-        config = super(InvConvBlock, self).get_config()
-        config.update(
-            {
-                "n_filters": self.n_filters,
-                "conv_size": self.conv_size,
-                "conv_stride": self.conv_stride,
-                "activation": self.activation,
-            }
-        )
-        return config
-
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
+    layer_out = _combine_layers(input_layer, layer_list)
+    return layer_out
 
 
-class UNet(tf.keras.Model):
-    def __init__(self, n_filters, k_size, k_stride, **kwargs):
-        super(UNet, self).__init__(**kwargs)
-        self.n_filters = n_filters
-        self.k_size = k_size
-        self.k_stride = k_stride
+def _decoder_block(input_layer, to_concatenate_layer, n_filters, conv_size, conv_stride, activation):
+    conv3D_T = tf.keras.layers.Conv3DTranspose(
+        filters=n_filters,
+        kernel_size=conv_size,
+        strides=conv_stride,
+        padding='same',
+    )
 
-        # Encoder
-        self.conv_block_1 = ConvBlock(n_filters, k_size, k_stride)
-        self.conv_block_2 = ConvBlock(n_filters * 2, k_size, k_stride)
-        self.conv_block_3 = ConvBlock(n_filters * 4, k_size, (1, 1, 1))
-        self.conv_block_4 = ConvBlock(n_filters * 8, k_size, (1, 1, 1))
+    batch_norm = tf.keras.layers.BatchNormalization()
+    activ = tf.keras.layers.Activation(activation)
 
-        # Decoder
-        self.inv_conv_block_1 = InvConvBlock(n_filters * 4, k_size, (1, 1, 1), "relu")
-        self.inv_conv_block_2 = InvConvBlock(n_filters * 2, k_size, (1, 1, 1), "relu")
-        self.inv_conv_block_3 = InvConvBlock(n_filters, k_size, k_stride, "relu")
-        self.inv_conv_block_4 = InvConvBlock(1, k_size, k_stride, "linear")
+    layer_list = [
+        conv3D_T,
+        batch_norm,
+        activ,
+    ]
 
-    def call(self, inputs, training=None):
-        h1 = self.conv_block_1(inputs, training=training)
-        h2 = self.conv_block_2(h1, training=training)
-        h3 = self.conv_block_3(h2, training=training)
-        h = self.conv_block_4(h3, training=training)
+    layer_out = _combine_layers(input_layer, layer_list)
 
-        h = self.inv_conv_block_1(h, skip_connect=h3, training=training)
-        h = self.inv_conv_block_2(h, skip_connect=h2, training=training)
-        h = self.inv_conv_block_3(h, skip_connect=h1, training=training)
-        h = self.inv_conv_block_4(h, training=training)
-        return h
+    if to_concatenate_layer is not None:
+        layer_out = tf.keras.layers.concatenate([layer_out, to_concatenate_layer])
 
-    def get_config(self):
-        config = super(UNet, self).get_config()
-        config.update(
-            {
-                "n_filters": self.n_filters,
-                "k_size": self.k_size,
-                "k_stride": self.k_stride,
-            }
-        )
-        return config
+    return layer_out
 
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
+
+def get_model(input_shape, n_filters, k_size, k_stride):
+    inputs = tf.keras.Input(input_shape)
+
+    # Encoder
+    conv_block_1 = _encoder_block(inputs, n_filters, k_size, k_stride)
+    conv_block_2 = _encoder_block(conv_block_1, n_filters * 2, k_size, k_stride)
+    conv_block_3 = _encoder_block(conv_block_2, n_filters * 4, k_size, (1, 1, 1))
+    conv_block_4 = _encoder_block(conv_block_3, n_filters * 8, k_size, (1, 1, 1))
+
+    # Decoder
+    inv_conv_block_1 = _decoder_block(conv_block_4, conv_block_3, n_filters * 4, k_size, (1, 1, 1), 'relu')
+    inv_conv_block_2 = _decoder_block(inv_conv_block_1, conv_block_2, n_filters * 2, k_size, (1, 1, 1), 'relu')
+    inv_conv_block_3 = _decoder_block(inv_conv_block_2, conv_block_1, n_filters, k_size, k_stride, 'relu')
+    inv_conv_block_4 = _decoder_block(inv_conv_block_3, None, 1, k_size, k_stride, 'linear')
+
+    model = tf.keras.Model(inputs=inputs, outputs=inv_conv_block_4)
+
+    return model

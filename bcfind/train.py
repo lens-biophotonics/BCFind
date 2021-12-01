@@ -13,7 +13,7 @@ from bcfind.data_generator import get_tf_data, Scaler
 from bcfind.losses import FramedCrossentropy3D
 from bcfind.blob_dog import BlobDoG
 from bcfind.utils import sigmoid
-from bcfind.unet import UNet
+from bcfind.unet import get_model
 
 
 def parse_args():
@@ -28,12 +28,12 @@ def parse_args():
 
 
 def build_unet(n_filters, k_size, k_stride, input_shape, learning_rate, exclude_border):
-    model = UNet(
+    model = get_model(
+        input_shape + [1],
         n_filters,
         k_size,
         k_stride,
     )
-    model.build((None, *input_shape, 1))
 
     if exclude_border is not None:
         loss = FramedCrossentropy3D(exclude_border, input_shape, from_logits=True)
@@ -57,9 +57,9 @@ def get_callbacks(checkpoint_dir, tensorboard_dir):
         shutil.rmtree(tensorboard_dir, ignore_errors=True)
 
     MC_callback = tf.keras.callbacks.ModelCheckpoint(
-        f"{checkpoint_dir}/model.h5",
+        f"{checkpoint_dir}/model.tf",
         save_best_only=True,
-        save_weights_only=True,
+        save_format='tf',
         save_freq="epoch",
         monitor="loss",
         mode="min",
@@ -130,6 +130,17 @@ def main():
     args = parse_args()
     conf = Configuration(args.config)
 
+    print("Building and training U-Net model")
+    unet = build_unet(
+        conf.unet.n_filters,
+        conf.unet.k_size,
+        conf.unet.k_stride,
+        conf.unet.input_shape,
+        conf.unet.learning_rate,
+        conf.unet.exclude_border,
+    )
+    unet.summary()
+
     x_file = f"{conf.exp.h5_dir}/X_train.h5"
     y_file = f"{conf.exp.h5_dir}/Y_train.h5"
     pred_file = f"{conf.exp.h5_dir}/Y_hat_train.h5"
@@ -167,17 +178,6 @@ def main():
     elif conf.unet.val_fold is None:
         train = data
         val = None
-
-    print("Building and training U-Net model")
-    unet = build_unet(
-        conf.unet.n_filters,
-        conf.unet.k_size,
-        conf.unet.k_stride,
-        conf.unet.input_shape,
-        conf.unet.learning_rate,
-        conf.unet.exclude_border,
-    )
-    unet.summary()
 
     unet = fit_unet(
         unet=unet,

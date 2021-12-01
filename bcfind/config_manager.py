@@ -71,7 +71,7 @@ class Configuration:
             self.preproc.standardization = "none"
 
         # UNet configuration
-        self.unet.input_shape = np.array(self.unet.input_shape)
+        self.unet.input_shape = self.unet.input_shape
 
         self.unet.checkpoint_dir = (
             f"{self.exp.basepath}/{self.exp.name}/UNet_checkpoint"
