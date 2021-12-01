@@ -63,7 +63,7 @@ class Configuration:
         # Experiment configuration
         self.exp.h5_dir = f"{self.exp.basepath}/{self.exp.name}/H5_files"
 
-        # PreProcessing configuration        
+        # PreProcessing configuration
         if self.preproc.normalization is None:
             self.preproc.normalization = "none"
 

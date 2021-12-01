@@ -9,11 +9,11 @@ class Scaler:
     def __init__(self, norm_method="input", stand_method="none"):
         """TODO describe function
 
-        :param norm_method: 
-        :type norm_method: 
-        :param stand_method: 
-        :type stand_method: 
-        :returns: 
+        :param norm_method:
+        :type norm_method:
+        :param stand_method:
+        :type stand_method:
+        :returns:
 
         """
         admitted_methods = ["input", "data", "none"]
@@ -38,9 +38,9 @@ class Scaler:
     def _normalize(self, X):
         """TODO describe function
 
-        :param X: 
-        :type X: 
-        :returns: 
+        :param X:
+        :type X:
+        :returns:
 
         """
         if self.norm_method == "input":
@@ -60,8 +60,8 @@ class Scaler:
         """TODO describe function
 
         :param X: a
-        :type X: 
-        :returns: 
+        :type X:
+        :returns:
 
         """
         if self.stand_method == "input":
@@ -216,9 +216,9 @@ def get_tf_data(
         )
 
         val_gen = BatchGenerator(
-            X[val_idx], 
-            Y[val_idx], 
-            batch_size, 
+            X[val_idx],
+            Y[val_idx],
+            batch_size,
             output_shape
         )
         val = tf.data.Dataset.from_generator(
