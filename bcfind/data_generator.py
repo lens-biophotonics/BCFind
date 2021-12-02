@@ -110,7 +110,7 @@ class BatchGenerator(tf.keras.utils.Sequence):
         self.Y = Y
         self.indices = list(range(self.X.shape[0]))
         self.batch_size = batch_size
-        self.output_shape = output_shape
+        self.output_shape = np.array(output_shape)
 
     def __len__(self):
         return int(np.ceil(self.X.shape[0] / self.batch_size))
@@ -121,18 +121,17 @@ class BatchGenerator(tf.keras.utils.Sequence):
         self.Y = self.Y[self.indices]
 
     def _random_crop(self, x_batch, y_batch):
-        lshape = x_batch[0].shape
-        assert lshape[2] >= self.output_shape[2]
+        batch_shape = np.array(x_batch.shape)
+        if np.less(batch_shape[1:], self.output_shape).any():
+            raise ValueError(f'Invalid shapes {batch_shape}, {self.output_shape}')
 
-        s0 = rs.randint(0, max(1, lshape[0] - self.output_shape[0]))
-        s1 = rs.randint(0, max(1, lshape[1] - self.output_shape[1]))
-        s2 = rs.randint(0, max(1, lshape[2] - self.output_shape[2]))
+        high = batch_shape[1:] - self.output_shape
+        high[high == 0] = 1
+        f = np.random.randint(0, high)
+        t = f + self.output_shape
 
-        s = np.array([s0, s1, s2])
-        e = s + self.output_shape
-
-        region_x = x_batch[:, s[0] : e[0], s[1] : e[1], s[2] : e[2]]
-        region_y = y_batch[:, s[0] : e[0], s[1] : e[1], s[2] : e[2]]
+        region_x = x_batch[:, f[0]:t[0], f[1]:t[1], f[2]:t[2]]
+        region_y = y_batch[:, f[0]:t[0], f[1]:t[1], f[2]:t[2]]
 
         return region_x.astype("float32"), region_y.astype("float32")
 
@@ -145,8 +144,8 @@ class BatchGenerator(tf.keras.utils.Sequence):
         return x_batch[..., np.newaxis], y_batch[..., np.newaxis]
 
     def __iter__(self):
-        for item in (self[i] for i in range(len(self))):
-            yield item
+        for i in range(len(self)):
+            yield self[i]
 
 
 def get_train_val_idx(n, val_fold, seed=123):
