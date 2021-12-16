@@ -1,4 +1,5 @@
 colorama
+coloredlogs
 cucim
 cupy-cuda112
 h5py
