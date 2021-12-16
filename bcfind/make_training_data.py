@@ -29,7 +29,7 @@ def get_target(
     df = pd.read_csv(open(marker_path, "r"))[["#x", " y", " z"]]
     df = df.dropna(0)
 
-    X = df.to_numpy()
+    X = np.fliplr(df.to_numpy())
     if downscale_factors is not None:
         X *= downscale_factors
 
