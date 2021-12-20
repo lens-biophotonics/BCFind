@@ -105,12 +105,10 @@ def fit_dog(
     exclude_border,
     max_match_dist,
     iterations=30,
-    logs_dir=None,
     checkpoint_dir=None,
+    n_cpu=10
 ):
     print(checkpoint_dir)
-    if os.path.exists(logs_dir):
-        shutil.rmtree(logs_dir, ignore_errors=True)
     if os.path.exists(checkpoint_dir):
         shutil.rmtree(checkpoint_dir, ignore_errors=True)
 
@@ -120,10 +118,8 @@ def fit_dog(
         Y,
         max_match_dist,
         n_iter=iterations,
-        logs_dir=logs_dir,
         checkpoint_dir=checkpoint_dir,
-        n_cpu=10,
-        verbose=1,
+        n_cpu=n_cpu,
     )
     return dog
 
