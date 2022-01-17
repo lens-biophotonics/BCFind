@@ -186,7 +186,7 @@ def _prune_blobs(blobs_array, overlap, *, sigma_dim=1):
 
 def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
     r""" Equivalent function to skimage.feature.blob_dog which runs on the GPU, making computation 10 times faster.
-    
+
     Finds blobs in the given grayscale image.
     Blobs are found using the Difference of Gaussian (DoG) method [1]_.
     For each blob found, the method returns its coordinates and the standard
@@ -210,13 +210,13 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
         The ratio between the standard deviation of Gaussian Kernels used for
         computing the Difference of Gaussians
     threshold_rel : float, optional.
-        A value between 0 and 1. The relative lower bound for scale space maxima. 
-        Local maxima smaller than max(image) * thresh are ignored. 
+        A value between 0 and 1. The relative lower bound for scale space maxima.
+        Local maxima smaller than max(image) * thresh are ignored.
         Reduce this to detect blobs with less intensities.
     overlap : float, optional
         A value between 0 and 1. If the area of two blobs overlaps by a
         fraction greater than `threshold`, the smaller blob is eliminated.
-    
+
     Returns
     -------
     A : (n, image.ndim + sigma) ndarray
@@ -248,7 +248,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
         max_sigma = np.array([max_sigma] * image.ndim)
     else:
         max_sigma = np.array(max_sigma)
-    
+
     # k such that min_sigma*(sigma_ratio**k) > max_sigma
     k = int(np.mean(np.log(max_sigma / min_sigma) / np.log(sigma_ratio) + 1))
 
@@ -262,7 +262,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
         low = cm_skim_filt.gaussian(image, sigma_list[i])
         high = cm_skim_filt.gaussian(image, sigma_list[i + 1])
         dog_image = (low - high) * cp.mean(sigma_list[i])
-        
+
         lm = cm_skim_feat.peak_local_max(
             dog_image,
             threshold_rel=threshold_rel,
@@ -270,7 +270,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
         )
         lm = cp.c_[lm, cp.ones(lm.shape[0]) * i]
         detected_blobs.append(lm)
-    
+
     detected_blobs = cp.concatenate(detected_blobs)
     detected_blobs = cp.asnumpy(detected_blobs).astype("float32")
 
@@ -339,12 +339,12 @@ class BlobDoG:
 
         Args:
             x (ndarray): Image array. Can be 2 or 3 dimensional.
-            parameters (dict, optional): Dictionary of blob detection parameters. 
+            parameters (dict, optional): Dictionary of blob detection parameters.
                 Expected keys are: [`min_rad`, `max_rad`, `sigma_ratio`, `overlap`, `threshold`].
                 Defaults to None will assign default or previously setted parameters.
 
         Returns:
-            [ndarray]: 2 dimensional array with shape [n_blobs, (n_dim + len(dim_resolution))]. 
+            [ndarray]: 2 dimensional array with shape [n_blobs, (n_dim + len(dim_resolution))].
                 First `n_dim` columns are the coordinates of each detected blob, last columns are the standard deviations
                 which detected the blob. For isotropic images (len(dim_resolution)=1) a single standard deviation is returned,
                 for anysotropic images (len(dim_resolution)==n_dim) the standard deviation of each axis is returned.
@@ -387,18 +387,18 @@ class BlobDoG:
         Args:
             y_pred (ndarray): 2 dimensional array of shape [n_blobs, n_dim] of predicted blobs
             y_true (ndarray): 2 dimensional array of shape [n_blobs, n_dim] of true blobs
-            max_match_dist (scalar): maximum distance between predicted and true blobs for a correct prediction. 
-                It must be in the same scale as dim_resolution. 
-            evaluation_type (str, optional): One of ["complete", "counts", "f1", "acc", "prec", "rec"]. 
+            max_match_dist (scalar): maximum distance between predicted and true blobs for a correct prediction.
+                It must be in the same scale as dim_resolution.
+            evaluation_type (str, optional): One of ["complete", "counts", "f1", "acc", "prec", "rec"].
                 "complete" returns every centroid labelled as TP, FP, or FN.
-                "counts" returns only the counts of TP, FP, FN plus the total number of predicted blobs 
+                "counts" returns only the counts of TP, FP, FN plus the total number of predicted blobs
                 and the total number of true blobs.
                 "f1", "acc", "prec", "rec" returns only the requested metric evaluation.
                 Defaults to "complete".
 
         Returns:
             [pandas.DataFrame or scalar]: if evaluation_type = "complete" returns a pandas.DataFrame with every centroid
-                labelled as TP, FP, or FN. If evaluation_type = "counts" returns a pandas.DataFrame with the counts of TP, FP, FN, 
+                labelled as TP, FP, or FN. If evaluation_type = "counts" returns a pandas.DataFrame with the counts of TP, FP, FN,
                 the total number of predicted blobs and the total number of true blobs.
                 if evaluation_type is one of ["f1", "acc", "prec", "rec"] returns the scalar of requested metric.
         """
@@ -426,11 +426,11 @@ class BlobDoG:
                 return metrics(eval_counts)[evaluation_type]
 
     def predict_and_evaluate(
-        self, 
-        x, 
-        y, 
-        max_match_dist, 
-        evaluation_type="complete", 
+        self,
+        x,
+        y,
+        max_match_dist,
+        evaluation_type="complete",
         parameters=None,
     ):
         """Predicts blob coordinates from x and evaluates the result with the true coordinates in y.
@@ -439,15 +439,15 @@ class BlobDoG:
         Args:
             x (ndarray): array of n_dim dimensions
             y (ndarray): 2 dimensional array with shape [n_blobs, n_dim] of true blobs coordinates
-            max_match_dist (scalar): maximum distance between predicted and true blobs for a correct prediction. 
+            max_match_dist (scalar): maximum distance between predicted and true blobs for a correct prediction.
                 It must be in the same scale as dim_resolution.
-            evaluation_type (str, optional): One of ["complete", "counts", "f1", "acc", "prec", "rec"]. 
+            evaluation_type (str, optional): One of ["complete", "counts", "f1", "acc", "prec", "rec"].
                 "complete" returns every centroid labelled as TP, FP, or FN.
-                "counts" returns only the counts of TP, FP, FN plus the total number of predicted blobs 
+                "counts" returns only the counts of TP, FP, FN plus the total number of predicted blobs
                 and the total number of true blobs.
                 "f1", "acc", "prec", "rec" returns only the requested metric evaluation.
                 Defaults to "complete".
-            parameters (dict, optional): Dictionary of blob detection parameters. 
+            parameters (dict, optional): Dictionary of blob detection parameters.
                 Expected keys are: [`min_rad`, `max_rad`, `sigma_ratio`, `overlap`, `threshold`].
                 Defaults to None will assign default or previously setted parameters.
 
@@ -467,12 +467,12 @@ class BlobDoG:
         return evaluation
 
     def _objective(
-        self, 
-        parameters, 
-        X, 
-        Y, 
-        max_match_dist, 
-        checkpoint_dir=None, 
+        self,
+        parameters,
+        X,
+        Y,
+        max_match_dist,
+        checkpoint_dir=None,
         n_cpu=1,
     ):
         self.train_step += 1
@@ -537,7 +537,7 @@ class BlobDoG:
         Args:
             X (iterable): Iterable of n_dim dimensional images. Length of X must be equal to lenght of Y.
             Y (iterable): Iterable of ndarrays of true blob coordinates. Length of Y must be equal to lenght of X.
-            max_match_dist (scalar): Maximum distance between predicted and true blobs for a correct prediction. 
+                max_match_dist (scalar): Maximum distance between predicted and true blobs for a correct prediction.
                 It must be in the same scale as dim_resolution.
             n_iter (int, optional): Number of TPE iterations to perform. Defaults to 60.
             checkpoint_dir (str, optional): Path to the directory where saving the parameters during training. Defaults to None.
@@ -562,9 +562,9 @@ class BlobDoG:
         }
 
         best_par = ho.fmin(
-            fn=obj_wrapper, 
-            space=search_space, 
-            algo=ho.tpe.suggest, 
+            fn=obj_wrapper,
+            space=search_space,
+            algo=ho.tpe.suggest,
             max_evals=n_iter,
         )
 
