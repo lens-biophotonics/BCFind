@@ -58,7 +58,7 @@ def sliding_volume_with_cells(
 
     def get_slice_cells_idx(points, z, slice_width):
         pts_idx = (points["z"] >= z - slice_width // 2) & (
-            points["z"] < z + slice_width // 2
+            points["z"] <= z + slice_width // 2
         )
         return pts_idx
 
@@ -70,11 +70,11 @@ def sliding_volume_with_cells(
         volume[..., 0],
         interpolation="none",
         aspect="auto",
-        cmap="inferno",
+        cmap="gray",
         vmin=0,
         vmax=255,
     )
-    sc = ax.scatter(slice_pts["y"], slice_pts["x"], c=cell_colors[pts_idx], s=15)
+    sc = ax.scatter(slice_pts["y"], slice_pts["x"], c=cell_colors[pts_idx], s=5)
     plt.close()
 
     def init():

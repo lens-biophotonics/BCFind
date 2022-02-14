@@ -29,7 +29,7 @@ def get_target(
     df = pd.read_csv(open(marker_path, "r"))[["#x", " y", " z"]]
     df = df.dropna(0)
 
-    X = np.fliplr(df.to_numpy())
+    X = df.to_numpy()
     if downscale_factors is not None:
         X *= downscale_factors
 
@@ -92,6 +92,7 @@ def get_target(
             sigma = max(1.5, r / np.min(dim_resolution))
             dim_sigma = sigma / (dim_resolution / np.min(dim_resolution))
 
+            # dim_sigma = (4, 4, 2)
             component = sp_filt.gaussian_filter(
                 component, dim_sigma, truncate=2.5, mode="constant"
             )
@@ -101,7 +102,7 @@ def get_target(
 
             print(
                 f"---> Created component for radius {r}"
-                f" with sigma {sigma}"
+                f" with sigma {dim_sigma=}"
                 f" for a total of {len(centers)} cells"
             )
 

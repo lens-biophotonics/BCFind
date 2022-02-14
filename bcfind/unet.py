@@ -71,7 +71,7 @@ def _decoder_block(input_layer, to_concatenate_layer, n_filters, conv_size, conv
 
 
 def get_model(input_shape, n_filters, k_size, k_stride):
-    inputs = tf.keras.Input(input_shape)
+    inputs = tf.keras.layers.Input(input_shape)
 
     # Encoder
     conv_block_1 = _encoder_block(inputs, n_filters, k_size, k_stride)
