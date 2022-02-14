@@ -1,8 +1,6 @@
-import functools as ft
-
 import numpy as np
-from scipy import ndimage
 
+from scipy import ndimage
 from skimage import filters
 
 
@@ -34,7 +32,7 @@ def random_brightness(x_batch, alpha_range):
     return x_batch + alpha
 
 
-def random_zoom(x_batch, alpha_range):
+def random_zoom(x_batch, y_batch, alpha_range):
     if alpha_range[0] < 1:
         raise ValueError('Zoom factor must be > 1')
 
@@ -46,6 +44,7 @@ def random_zoom(x_batch, alpha_range):
     zoom = np.ones(rank)
     zoom[1:-1] = alpha
     x_batch = ndimage.zoom(x_batch, zoom, order=0, prefilter=False)
+    y_batch = ndimage.zoom(y_batch, zoom, order=0, prefilter=False)
 
     # random crop
     high = x_batch.shape[1:-1] - original_shape[1:-1]
@@ -53,7 +52,7 @@ def random_zoom(x_batch, alpha_range):
     f = np.random.randint(0, high)
     t = f + original_shape[1:-1]
 
-    return x_batch[:, f[0]:t[0], f[1]:t[1], f[2]:t[2]]
+    return x_batch[:, f[0]:t[0], f[1]:t[1], f[2]:t[2]],  y_batch[:, f[0]:t[0], f[1]:t[1], f[2]:t[2]]
 
 
 def random_gauss_filter(x_batch, sigma_range):
@@ -72,54 +71,18 @@ def random_noise(x_batch, sigma_range):
     return x_batch + noise
 
 
-class Augmentor:
-    def __init__(self, data_gen):
-        self.data_gen = data_gen
-        self.operations = dict()
-        self.it = 0
+def random_rotation(x_batch, y_batch, rotation_angles):
+    angle = np.random.choice(rotation_angles)
+    
+    for i in range(x_batch.shape[0]):
+        x_batch[i] = ndimage.interpolation.rotate(x_batch[i], angle, axes=(0, 1))
+        y_batch[i] = ndimage.interpolation.rotate(y_batch[i], angle, axes=(0, 1))
+    
+    return x_batch, y_batch
 
-    def add_random_gamma(self, gamma_range, p=0.5):
-        self.operations['gamma'] = ft.partial(random_gamma, gamma_range=gamma_range), p
-
-    def add_random_contrast(self, alpha_range, p=0.5):
-        self.operations['contrast'] = ft.partial(random_contrast, alpha_range=alpha_range), p
-
-    def add_random_brightness(self, alpha_range, p=0.5):
-        self.operations['brightness'] = ft.partial(random_brightness, alpha_range=alpha_range), p
-
-    def add_random_zoom(self, alpha_range, p=0.5):
-        self.operations['zoom'] = ft.partial(random_zoom, alpha_range=alpha_range), p
-
-    def add_random_gauss_filter(self, sigma_range, p=0.5):
-        self.operations['gauss_filter'] = ft.partial(random_gauss_filter, sigma_range=sigma_range), p
-
-    def add_random_noise(self, sigma_range, p=0.5):
-        self.operations['noise'] = ft.partial(random_noise, sigma_range=sigma_range), p
-
-    def __len__(self):
-        return len(self.data_gen)
-
-    def __getitem__(self, idx):
-        x, y = self.data_gen[idx]
-        for name, (op, p) in self.operations.items():
-            if np.random.uniform(0, 1) > p:
-                continue
-            if name == 'zoom':
-                x = op(x)
-                y = op(y)
-            else:
-                x = op(x)
-
-        return x, y
-
-    def __iter__(self):
-        for item in (self[i] for i in range(len(self))):
-            yield item
-
-    def __next__(self):
-        if self.it <= len(self):
-            item = self[self.it]
-            self.it += 1
-            return item
-        else:
-            raise StopIteration
+def random_flip(x_batch, y_batch, axes):
+    axis = np.random.choice(axes) + 1
+    
+    x_batch = np.flip(x_batch, axis=axis)
+    y_batch = np.flip(y_batch, axis=axis)
+    return x_batch, y_batch
