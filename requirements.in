@@ -1,5 +1,4 @@
 colorama
-coloredlogs
 cucim
 cupy-cuda112
 h5py
@@ -9,5 +8,5 @@ numba
 pandas
 scikit-image
 scipy
-tensorflow==2.7
+tensorflow==2.3
 zetastitcher
