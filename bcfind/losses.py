@@ -11,8 +11,11 @@ class FramedCrossentropy3D(tf.keras.losses.Loss):
 
     def __init__(self, border_size, target_shape, **kwargs):
         super(FramedCrossentropy3D, self).__init__()
-
-        self.bce = tf.keras.losses.BinaryCrossentropy(reduction="none", **kwargs)
+        self.border_size = border_size
+        self.target_shape = target_shape
+        self.kwargs = kwargs
+        
+        self.bce = tf.keras.losses.BinaryCrossentropy(reduction="none", **self.kwargs)
 
         framing_mask = np.zeros(target_shape)
         framing_mask[
@@ -32,3 +35,11 @@ class FramedCrossentropy3D(tf.keras.losses.Loss):
         loss = tf.map_fn(self.mask_fn, loss)
         loss = tf.reduce_mean(loss)
         return loss
+    
+    def get_config(self):
+        config = {
+            'border_size': self.border_size,
+            'target_shape': self.target_shape,
+            'kwargs': self.kwargs,
+        }
+        return config
