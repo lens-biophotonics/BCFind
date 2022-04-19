@@ -1,5 +1,4 @@
 import logging
-from multiprocessing.sharedctypes import Value
 import numpy as np
 import functools as ft
 import tensorflow as tf
@@ -39,6 +38,8 @@ def get_op_list(augmentations):
             'contrast': random_contrast_tf,
             'brightness': random_brightness_tf,
             'noise': random_noise_tf,
+            'rotation': random_rotation_tf,
+            'zoom': random_zoom_tf,
             }
     
     ops_list = []
@@ -71,13 +72,49 @@ def get_op_list(augmentations):
     return ops_list
 
 
-class TrainingDataset:
-    """ Training dataset flow for 3D gray images with cell locations as targets.
+@tf.function
+def get_target_tf(marker_file, target_shape, dim_resolution):
+    def get_target_wrap(marker_file, target_shape, dim_resolution):
+        marker_file = Path(marker_file.decode())
+        blobs = get_target(
+            marker_file,
+            target_shape=target_shape, 
+            default_radius=3.5, 
+            dim_resolution=dim_resolution,
+        ) # FIXME! non configurable args!!
+        return blobs.astype(np.float32)
+
+    target = tf.numpy_function(get_target_wrap, [marker_file, target_shape, dim_resolution], tf.float32)
+    return target
+
+
+@tf.function
+def get_input_tf(input_file):
+    def get_input_wrap(input_file):
+        input_file = Path(input_file.decode())
+        input_image = InputFile(input_file).whole().astype(np.float32)
+        return input_image
+
+    input = tf.numpy_function(get_input_wrap, [input_file], tf.float32)
+    return input
+
+
+class TrainingDataset(tf.data.Dataset):
+    """ Training data flow for 3D gray images with cell locations as targets.
+
     Args:
         tiff_list (list):
+
         marker_list (list):
-        output_shape (list):
+
+        batch_size (list, tuple):
+
+        output_shape (list, tuple):
+
+        dim_resolution (float, list, tuple):
+
         augmentations (optional, list, dict):
+
         augmentations_prob (optional, float, list):
 
     Returns:
@@ -87,53 +124,40 @@ class TrainingDataset:
         tensorflow.Tensor: batch of inputs and targets.
     """
     @staticmethod
-    def _img_generator(tiff_list, marker_list):
-        for marker_file in map(lambda x: Path(x.decode()), marker_list):
-            fname = marker_file.with_suffix('').name
+    @tf.function
+    def parse_imgs(tiff_path, marker_path, dim_resolution):
+        logger.info(f'loading {tiff_path}')
+        input_image = get_input_tf(tiff_path)
+        shape = tf.shape(input_image)
 
-            input_file = [f for f in map(lambda x: Path(x.decode()), tiff_list) if f.name == fname]
-            
-            if len(input_file) > 1:
-                raise ValueError(f'{len(input_file)} tiff files have the same name.')
-            elif len(input_file) == 0:
-                raise ValueError(f'Tiff file {fname} not found!')
+        logger.info(f'creating blobs from {marker_path}')
+        shape_T = [shape[d] for d in (2, 1, 0)]
+        dim_resolution_T = [dim_resolution[d] for d in (2, 1, 0)]
+        blobs = get_target_tf(marker_path, shape_T, dim_resolution_T)
+        blobs = tf.transpose(blobs, perm=(2, 1, 0))
+        return input_image, blobs
 
-            logger.info(f'loading {input_file[0]}')
-            input_image = InputFile(input_file[0]).whole().astype(np.float32)        
+    def __new__(cls, tiff_list, marker_list, batch_size, output_shape, dim_resolution=1.0, augmentations=None, augmentations_prob=0.5):
+        if isinstance(dim_resolution, (float, int)):
+            dim_resolution = (dim_resolution) * 3
+        
+        # load inputs and targets from paths
+        data = tf.data.Dataset.from_tensor_slices((tiff_list, marker_list))
+        data = data.map(lambda x, y: cls.parse_imgs(x, y, dim_resolution), num_parallel_calls=20)
+        data = data.cache().shuffle(len(marker_list), reshuffle_each_iteration=True)
 
-            logger.info(f'creating blobs from {marker_file}')
-            blobs = get_target(marker_file, [input_image.shape[d] for d in [2, 1, 0]], default_radius=1.5)
+        # crop inputs and targets
+        data = data.map(lambda x, y: random_crop_tf(x, y, output_shape))
 
-            blobs = blobs.transpose((2, 1, 0))
-            yield input_image, blobs
-
-    def __new__(cls, tiff_list, marker_list, batch_size, output_shape, augmentations=None, augmentations_prob=0.5):        
-        def _my_gen():
-            for el in crop_gen:
-                yield el[0], el[1]
-
-        img_gen = tf.data.Dataset.from_generator(
-            cls._img_generator,
-            output_signature=tf.TensorSpec(None, tf.float32),
-            args=(tiff_list, marker_list))
-
-        random_crop_wrap = ft.partial(random_crop, zoom_range=None, target_shape=output_shape)
-
-        crop_gen = img_gen \
-            .cache() \
-            .shuffle(len(marker_list), reshuffle_each_iteration=True) \
-            .map(lambda el: tf.numpy_function(random_crop_wrap, [el[0], el[1]], (tf.float32, tf.float32)))
-
+        # do augmentations
         if augmentations is not None:
             ops_list = get_op_list(augmentations)
-
-            block_gen = tf.data.Dataset.from_generator(_my_gen, output_signature=(
-                    (tf.TensorSpec((tuple(output_shape) + (1,)), tf.float32),) * 2))
-            block_gen = block_gen.map(lambda x, y: (augment(x, ops_list, augmentations_prob), y))
-            return block_gen.batch(batch_size)
+            data = data.map(lambda x, y: augment(x, y, ops_list, augmentations_prob))
         
-        else:
-            return crop_gen.batch(batch_size)
+        # add channel dimension
+        data = data.map(lambda x, y: (tf.expand_dims(x, axis=-1), tf.expand_dims(y, axis=-1)))
+
+        return data.batch(batch_size)
 
 
 if __name__ == '__main__':
@@ -141,21 +165,41 @@ if __name__ == '__main__':
     
     os.environ['CUDA_VISIBLE_DEVICES'] = '1'
     
-    marker_dir = '/mnt/NASone/curzio/Data/I48/Gray_matter/GT_files/Train'
-    img_dir = '/mnt/NASone/curzio/Data/I48/Gray_matter/Tiff_files/Train'
+    # marker_dir = '/mnt/NASone/curzio/Data/I48/Gray_matter/GT_files/Train'
+    # img_dir = '/mnt/NASone/curzio/Data/I48/Gray_matter/Tiff_files/Train'
 
-    marker_files = [f'{marker_dir}/{f}' for f in os.listdir(marker_dir)]
-    img_files = [f'{img_dir}/{f}' for f in os.listdir(img_dir)]
+    # marker_files = [f'{marker_dir}/{f}' for f in os.listdir(marker_dir)]
+    # img_files = [f'{img_dir}/{f}' for f in os.listdir(img_dir)]
+
+    data_dir = '/mnt/NASone/curzio/Data/SST'
+    marker_files = [f'{data_dir}/GT_files/Train/{fname}' for fname in os.listdir(f'{data_dir}/GT_files/Train')]
+    img_files = [f'{data_dir}/Tiff_files/Train/{fname}' for fname in os.listdir(f'{data_dir}/Tiff_files/Train')]
+    
+    ordered_tiff_list = []
+    for f in marker_files:
+        fname = Path(f).with_suffix('').name
+        tiff_file = [f for f in map(lambda f: Path(f), img_files) if f.name == fname]
+        ordered_tiff_list.append(str(tiff_file[0]))
 
     data = TrainingDataset(
-        img_files, 
-        marker_files, 
-        batch_size=2, 
-        output_shape=[50, 100, 100], 
-        augmentations=None,#('gamma', 'noise', lambda x: x - tf.reduce_min(x)),
-        augmentations_prob=1.0
+        ordered_tiff_list[:10],
+        marker_files[:10],
+        batch_size=2,
+        output_shape=[50, 100, 100],
+        dim_resolution=[2.0, 0.65, 0.65],
+        augmentations={
+            'gamma':[0.5, 2.0],
+            'rotation':[-180, 180],
+            'zoom':[1.3, 1.5],
+            'brightness':[-50, 100],
+            'noise':[0.001, 0.05],
+            'myfunc': lambda x, y: (x - tf.reduce_min(x), y),
+            },
+        augmentations_prob=[0.3, 0.3, 0.0, 0.0, 0.3],
         )
 
-    for x, y in data:
-        print()
-        print(x.shape, tf.reduce_min(x, axis=[1, 2, 3, 4]).numpy())
+    for e in range(3):
+        for x, y in data:
+            print()
+            print(x.shape, tf.reduce_min(x, axis=[1, 2, 3, 4]).numpy())
+            print(y.shape, tf.reduce_min(y, axis=[1, 2, 3, 4]).numpy())
