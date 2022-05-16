@@ -82,7 +82,9 @@ class TrainingDataset(tf.data.Dataset):
         dim_resolution_T = [dim_resolution[d] for d in (2, 1, 0)]
         blobs = get_target_tf(marker_path, shape_T, dim_resolution_T)
         blobs = tf.transpose(blobs, perm=(2, 1, 0))
-        return input_image, blobs
+
+        xy = tf.concat([tf.expand_dims(input_image, 0), tf.expand_dims(blobs, 0)], axis=0)
+        return tf.ensure_shape(xy, (2, None, None, None))
 
     def __new__(cls, tiff_list, marker_list, batch_size, dim_resolution=1.0, output_shape=None, augmentations=None, augmentations_prob=0.5):
         if isinstance(dim_resolution, (float, int)):
@@ -90,27 +92,29 @@ class TrainingDataset(tf.data.Dataset):
 
         # with tf.device('/cpu:0'):
         data = tf.data.Dataset.from_tensor_slices((tiff_list, marker_list))
-
+        
         # load images and targets from paths
-        data = data.map(lambda x, y: cls.parse_imgs(x, y, dim_resolution), num_parallel_calls=tf.data.AUTOTUNE)
+        data = data.map(lambda x, y: cls.parse_imgs(x, y, dim_resolution), num_parallel_calls=tf.data.AUTOTUNE, deterministic=False)
 
         # cache data after time consuming map and make it shuffle every epoch
         data = data.cache().shuffle(len(marker_list), reshuffle_each_iteration=True)
 
         # crop inputs and targets
         if output_shape is not None:
-            data = data.map(lambda x, y: random_crop_tf(x, y, output_shape), num_parallel_calls=tf.data.AUTOTUNE)
-
+            data = data.map(lambda xy: random_crop_tf(xy, output_shape), num_parallel_calls=tf.data.AUTOTUNE, deterministic=False)
+        
         # do augmentations
         if augmentations is not None:
-            ops_list = get_op_list(augmentations)
-            data = data.map(lambda x, y: augment(x, y, ops_list, augmentations_prob), num_parallel_calls=tf.data.AUTOTUNE)
+            data = data.map(lambda xy: augment(xy, augmentations, augmentations_prob), num_parallel_calls=tf.data.AUTOTUNE, deterministic=False)
         
         # add channel dimension
-        data = data.map(lambda x, y: (tf.expand_dims(x, axis=-1), tf.expand_dims(y, axis=-1)), num_parallel_calls=tf.data.AUTOTUNE)
+        data = data.map(lambda xy: tf.expand_dims(xy, axis=-1), num_parallel_calls=tf.data.AUTOTUNE, deterministic=False)
         
-        data = data.batch(batch_size).prefetch(tf.data.AUTOTUNE)
-        return data
+        # unstack xy
+        data = data.map(lambda xy: tf.unstack(xy), num_parallel_calls=tf.data.AUTOTUNE, deterministic=False)
+        
+        return data.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
 
 
 if __name__ == '__main__':
@@ -124,15 +128,15 @@ if __name__ == '__main__':
     
     os.environ['CUDA_VISIBLE_DEVICES'] = '1'
     
-    # marker_dir = '/mnt/NASone/curzio/Data/I48/Gray_matter/GT_files/Train'
-    # img_dir = '/mnt/NASone/curzio/Data/I48/Gray_matter/Tiff_files/Train'
+    marker_dir = '/mnt/NASone/curzio/Data/I48/Gray_matter/GT_files/Train'
+    img_dir = '/mnt/NASone/curzio/Data/I48/Gray_matter/Tiff_files/Train'
 
-    # marker_files = [f'{marker_dir}/{f}' for f in os.listdir(marker_dir)]
-    # img_files = [f'{img_dir}/{f}' for f in os.listdir(img_dir)]
+    marker_files = [f'{marker_dir}/{f}' for f in os.listdir(marker_dir)]
+    img_files = [f'{img_dir}/{f}' for f in os.listdir(img_dir)]
 
-    data_dir = '/mnt/NASone/curzio/Data/SST'
-    marker_files = [f'{data_dir}/GT_files/Train/{fname}' for fname in os.listdir(f'{data_dir}/GT_files/Train')]
-    img_files = [f'{data_dir}/Tiff_files/Train/{fname}' for fname in os.listdir(f'{data_dir}/Tiff_files/Train')]
+    # data_dir = '/mnt/NASone/curzio/Data/SST'
+    # marker_files = [f'{data_dir}/GT_files/Train/{fname}' for fname in os.listdir(f'{data_dir}/GT_files/Train')]
+    # img_files = [f'{data_dir}/Tiff_files/Train/{fname}' for fname in os.listdir(f'{data_dir}/Tiff_files/Train')]
     
     sorted_tiff_list = []
     for f in marker_files:
@@ -144,18 +148,32 @@ if __name__ == '__main__':
         sorted_tiff_list[:],
         marker_files[:],
         batch_size=4,
-        output_shape=[80, 240, 240],
+        output_shape=[50, 100, 100],
         dim_resolution=[2.0, 0.65, 0.65],
-        augmentations={
-            'gamma': [0.5, 2.0],
-            'rotation': [-180, 180],
-            'zoom': [1.3, 1.5],
-            'brightness': [-0.3, 0.3],
-            'noise': [0.001, 0.05],
-            'blur': [0.01, 1.5]
-            # 'myfunc': lambda x, y: (x - tf.reduce_min(x), y),
-
+        augmentations = {
+            'brightness': {
+                'param_range': [-0.1, 0.1]
             },
+            # 'gamma': {
+            #     'param_range': [0.5, 1.8]
+            #     },
+            # 'noise':{
+            #     'param_range': [0.001, 0.05]
+            # },
+            # 'blur': {
+            #     'param_range': [0.01, 1.5]
+            # },
+            'zoom': {
+                'param_range': [1.0, 1.3]
+            },
+            'rotation': {
+                'param_range': [-180, 180],
+                'axes': [2, 3]
+            },
+            'flip': {
+                'axes': [2, 3]
+            },
+        },
         augmentations_prob=1.0,
         )
 
