@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
+from bcfind.switch_normalization import SwitchNormalization
 
 def _combine_layers(input_layer, layerlist: list):
     """
@@ -26,19 +27,23 @@ def _combine_layers(input_layer, layerlist: list):
     return layer_in
 
 
-def _encoder_block(input_layer, n_filters, conv_size, conv_stride):
+def _encoder_block(input_layer, n_filters, conv_size, conv_stride, regularizer=None):
     conv3D = tf.keras.layers.Conv3D(
         filters=n_filters,
         kernel_size=conv_size,
         strides=conv_stride,
         padding='same',
+        kernel_regularizer=regularizer,
+        bias_regularizer=regularizer,
     )
-    batch_norm = tf.keras.layers.BatchNormalization()
+    # batch_norm = tf.keras.layers.BatchNormalization()
+    switch_norm = SwitchNormalization()
     relu = tf.keras.layers.Activation('relu')
 
     layer_list = [
         conv3D,
-        batch_norm,
+        # batch_norm,
+        switch_norm,
         relu,
     ]
 
@@ -46,20 +51,24 @@ def _encoder_block(input_layer, n_filters, conv_size, conv_stride):
     return layer_out
 
 
-def _decoder_block(input_layer, to_concatenate_layer, n_filters, conv_size, conv_stride, activation):
+def _decoder_block(input_layer, to_concatenate_layer, n_filters, conv_size, conv_stride, activation, regularizer=None):
     conv3D_T = tf.keras.layers.Conv3DTranspose(
         filters=n_filters,
         kernel_size=conv_size,
         strides=conv_stride,
         padding='same',
+        kernel_regularizer=regularizer,
+        bias_regularizer=regularizer,
     )
 
-    batch_norm = tf.keras.layers.BatchNormalization()
+    # batch_norm = tf.keras.layers.BatchNormalization()
+    switch_norm = SwitchNormalization()
     activ = tf.keras.layers.Activation(activation)
 
     layer_list = [
         conv3D_T,
-        batch_norm,
+        # batch_norm,
+        switch_norm,
         activ,
     ]
 
@@ -143,24 +152,42 @@ def _patch_embedding(input_layer, emb_dim, patch_size, stride):
     return patch_emb
 
 
-def UNet(input_shape, n_filters, k_size, k_stride):
+def UNet(input_shape, n_filters, k_size, k_stride, dropout=None, regularizer=None):
     inputs = tf.keras.layers.Input(input_shape)
 
     # Encoder
-    conv_block_1 = _encoder_block(inputs, n_filters, k_size, k_stride)
-    conv_block_2 = _encoder_block(conv_block_1, n_filters * 2, k_size, k_stride)
-    conv_block_3 = _encoder_block(conv_block_2, n_filters * 4, k_size, (1, 1, 1))
-    conv_block_4 = _encoder_block(conv_block_3, n_filters * 8, k_size, (1, 1, 1))
+    conv_block_1 = _encoder_block(inputs, n_filters, k_size, k_stride, regularizer)
+    if dropout:
+        conv_block_1 = tf.keras.layers.Dropout(dropout / 2)(conv_block_1)
+
+    conv_block_2 = _encoder_block(conv_block_1, n_filters * 2, k_size, k_stride, regularizer)
+    if dropout:
+        conv_block_2 = tf.keras.layers.Dropout(dropout)(conv_block_2)
+
+    conv_block_3 = _encoder_block(conv_block_2, n_filters * 4, k_size, (1, 1, 1), regularizer)
+    if dropout:
+        conv_block_3 = tf.keras.layers.Dropout(dropout)(conv_block_3)
+
+    conv_block_4 = _encoder_block(conv_block_3, n_filters * 8, k_size, (1, 1, 1), regularizer)
+    if dropout:
+        conv_block_4 = tf.keras.layers.Dropout(dropout)(conv_block_4)
 
     # Decoder
-    inv_conv_block_1 = _decoder_block(conv_block_4, conv_block_3, n_filters * 4, k_size, (1, 1, 1), 'relu')
-    inv_conv_block_2 = _decoder_block(inv_conv_block_1, conv_block_2, n_filters * 2, k_size, (1, 1, 1), 'relu')    
-    inv_conv_block_3 = _decoder_block(inv_conv_block_2, conv_block_1, n_filters, k_size, k_stride, 'relu')    
-    inv_conv_block_4 = _decoder_block(inv_conv_block_3, None, 1, k_size, k_stride, 'linear')
+    inv_conv_block_1 = _decoder_block(conv_block_4, conv_block_3, n_filters * 4, k_size, (1, 1, 1), 'relu', regularizer)
+    if dropout:
+        inv_conv_block_1 = tf.keras.layers.Dropout(dropout)(inv_conv_block_1)
 
-    model = tf.keras.Model(inputs=inputs, outputs=inv_conv_block_4)
+    inv_conv_block_2 = _decoder_block(inv_conv_block_1, conv_block_2, n_filters * 2, k_size, (1, 1, 1), 'relu', regularizer)
+    if dropout:
+        inv_conv_block_2 = tf.keras.layers.Dropout(dropout)(inv_conv_block_2)
 
-    return model
+    inv_conv_block_3 = _decoder_block(inv_conv_block_2, conv_block_1, n_filters, k_size, k_stride, 'relu', regularizer)
+    if dropout:
+        inv_conv_block_3 = tf.keras.layers.Dropout(dropout)(inv_conv_block_3)
+    
+    inv_conv_block_4 = _decoder_block(inv_conv_block_3, None, 1, k_size, k_stride, 'linear', regularizer)
+
+    return tf.keras.Model(inputs=inputs, outputs=inv_conv_block_4)
 
 
 def AttentionUNet(input_shape, n_filters, k_size, k_stride):
@@ -184,9 +211,7 @@ def AttentionUNet(input_shape, n_filters, k_size, k_stride):
 
     inv_conv_block_4 = _decoder_block(inv_conv_block_3, None, 1, k_size, k_stride, 'linear')
 
-    model = tf.keras.Model(inputs=inputs, outputs=inv_conv_block_4)
-
-    return model
+    return tf.keras.Model(inputs=inputs, outputs=inv_conv_block_4)
 
 
 def ECAUNet(input_shape, n_filters, k_size, k_stride):
@@ -217,9 +242,7 @@ def ECAUNet(input_shape, n_filters, k_size, k_stride):
     
     inv_conv_block_4 = _decoder_block(inv_conv_block_3, None, 1, k_size, k_stride, 'linear')
 
-    model = tf.keras.Model(inputs=inputs, outputs=inv_conv_block_4)
-
-    return model
+    return tf.keras.Model(inputs=inputs, outputs=inv_conv_block_4)
 
 
 def SEUNet(input_shape, n_filters, k_size, k_stride, squeeze_factor=2):
@@ -236,6 +259,7 @@ def SEUNet(input_shape, n_filters, k_size, k_stride, squeeze_factor=2):
     conv_block_3 = _encoder_block(conv_block_2, n_filters * 4, k_size, (1, 1, 1))
     conv_block_3 = _squeeze_and_excite(conv_block_3, squeeze_factor)
     
+    # Bottleneck
     conv_block_4 = _encoder_block(conv_block_3, n_filters * 8, k_size, (1, 1, 1))
     conv_block_4 = _squeeze_and_excite(conv_block_4, squeeze_factor)
 
@@ -249,8 +273,7 @@ def SEUNet(input_shape, n_filters, k_size, k_stride, squeeze_factor=2):
     inv_conv_block_3 = _decoder_block(inv_conv_block_2, conv_block_1, n_filters, k_size, k_stride, 'relu')
     inv_conv_block_3 = _squeeze_and_excite(inv_conv_block_3, squeeze_factor)
     
+    # Predictor
     inv_conv_block_4 = _decoder_block(inv_conv_block_3, None, 1, k_size, k_stride, 'linear')
 
-    model = tf.keras.Model(inputs=inputs, outputs=inv_conv_block_4)
-
-    return model
+    return tf.keras.Model(inputs=inputs, outputs=inv_conv_block_4)
