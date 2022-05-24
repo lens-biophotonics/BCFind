@@ -5,7 +5,7 @@ import tensorflow as tf
 from pathlib import Path
 
 from zetastitcher import InputFile
-from bcfind.make_training_data import get_target
+from bcfind.artificial_targets import get_target
 from bcfind.augmentation import *
 
 
@@ -114,77 +114,3 @@ class TrainingDataset(tf.data.Dataset):
         data = data.map(lambda xy: tf.unstack(xy), num_parallel_calls=tf.data.AUTOTUNE, deterministic=False)
         
         return data.batch(batch_size).prefetch(tf.data.AUTOTUNE)
-
-
-
-if __name__ == '__main__':
-    import os
-    import time
-    
-    gpus = tf.config.list_physical_devices('GPU')
-    tf.config.set_visible_devices(gpus[-1], 'GPU')
-    tf.config.experimental.set_memory_growth(gpus[-1], True)
-    
-    
-    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
-    
-    marker_dir = '/mnt/NASone/curzio/Data/I48/Gray_matter/GT_files/Train'
-    img_dir = '/mnt/NASone/curzio/Data/I48/Gray_matter/Tiff_files/Train'
-
-    marker_files = [f'{marker_dir}/{f}' for f in os.listdir(marker_dir)]
-    img_files = [f'{img_dir}/{f}' for f in os.listdir(img_dir)]
-
-    # data_dir = '/mnt/NASone/curzio/Data/SST'
-    # marker_files = [f'{data_dir}/GT_files/Train/{fname}' for fname in os.listdir(f'{data_dir}/GT_files/Train')]
-    # img_files = [f'{data_dir}/Tiff_files/Train/{fname}' for fname in os.listdir(f'{data_dir}/Tiff_files/Train')]
-    
-    sorted_tiff_list = []
-    for f in marker_files:
-        fname = Path(f).with_suffix('').name
-        tiff_file = [f for f in map(lambda f: Path(f), img_files) if f.name == fname]
-        sorted_tiff_list.append(str(tiff_file[0]))
-
-    data = TrainingDataset(
-        sorted_tiff_list[:],
-        marker_files[:],
-        batch_size=4,
-        output_shape=[50, 100, 100],
-        dim_resolution=[2.0, 0.65, 0.65],
-        augmentations = {
-            'brightness': {
-                'param_range': [-0.1, 0.1]
-            },
-            # 'gamma': {
-            #     'param_range': [0.5, 1.8]
-            #     },
-            # 'noise':{
-            #     'param_range': [0.001, 0.05]
-            # },
-            # 'blur': {
-            #     'param_range': [0.01, 1.5]
-            # },
-            'zoom': {
-                'param_range': [1.0, 1.3]
-            },
-            'rotation': {
-                'param_range': [-180, 180],
-                'axes': [2, 3]
-            },
-            'flip': {
-                'axes': [2, 3]
-            },
-        },
-        augmentations_prob=1.0,
-        )
-
-    for epoch in range(5):
-        s = time.time()
-        for x, y in data:
-            x_shape = x.shape
-            x_min = tf.reduce_min(x, axis=[1, 2, 3, 4]).numpy()
-            y_shape = y.shape
-            y_min = tf.reduce_min(y, axis=[1, 2, 3, 4]).numpy()
-        e = time.time()
-        print()
-        print(f'Time elapsed for epoch {epoch + 1}: {np.round(e-s, 4)} seconds.')
-        print()
