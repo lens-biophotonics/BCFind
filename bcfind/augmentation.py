@@ -28,7 +28,7 @@ def random_crop_tf(input, target_shape=(50, 100, 100)):
 
 
 @tf.function
-def random_zoom_tf(input, param_range=(1.0, 1.3), order=0, method='sitk'):
+def random_zoom_tf(input, param_range=(1.0, 1.1), order=1):
     def sitk_zoom(x, param_range=param_range, order=order):
         if order == 0:
             interpolator = sitk.sitkNearestNeighbor
@@ -84,15 +84,15 @@ def random_zoom_tf(input, param_range=(1.0, 1.3), order=0, method='sitk'):
 
 
 @tf.function
-def random_rotation_tf(input, param_range=(-180, 180), axes=(-2, -1)):
+def random_90rotation_tf(input, param_range=(0, 270), axes=(-2, -1), mode='constant'):
     def scipy_rotate(x, param_range=param_range, axes=axes):
-        angles = np.arange(param_range[0], param_range[1], 90)
+        angles = np.arange(param_range[0], param_range[1] + 1, 90)
         angle = rng.choice(angles)
 
         if len(axes) > 2:
             axes = rng.choice(axes, size=2, replace=False)
 
-        output = ndimage.rotate(x, angle, axes=axes, reshape=False)
+        output = ndimage.rotate(x, angle, axes=axes, reshape=False, mode=mode)
         return output
 
     output =  tf.numpy_function(scipy_rotate, [input], tf.float32)
@@ -100,7 +100,7 @@ def random_rotation_tf(input, param_range=(-180, 180), axes=(-2, -1)):
 
 
 @tf.function
-def random_flip_tf(input, axes=(1, 2, 3)):
+def random_flip_tf(input, axes=(-2)):
     def numpy_flip(x, axes=axes):
         axis = rng.choice(axes)
         output = np.flip(x, axis=axis)
@@ -111,7 +111,7 @@ def random_flip_tf(input, axes=(1, 2, 3)):
 
 
 @tf.function
-def random_blur_tf(input, param_range=(0.01, 1.0)):
+def random_blur_tf(input, param_range=(0.01, 0.06)):
     def scipy_blur(x, param_range=param_range):
         sigma = [rng.uniform(param_range[0], param_range[1])] * len(x.shape)
         
@@ -137,7 +137,7 @@ def random_gamma_tf(input, param_range=(0.8, 1.2)):
 
 
 @tf.function
-def random_noise_tf(input, param_range=(0.001, 0.01)):
+def random_noise_tf(input, param_range=(0.001, 0.02)):
     sigma = tf.random.uniform((1,), param_range[0], param_range[1])
     noise = tf.random.normal(tf.shape(input), mean=0, stddev=sigma)
     return input + noise
@@ -151,8 +151,19 @@ def random_contrast_tf(input, param_range=(0, 2)):
 
 
 @tf.function
-def random_brightness_tf(input, param_range=(-0.1, 0.1)):
-    return input + tf.random.uniform((1,), param_range[0], param_range[1])
+def random_brightness_tf(input, param_range=(-0.06, 0.06)):
+    x_min = tf.reduce_min(input)
+    x_max = tf.reduce_max(input)
+    
+    output = input + tf.random.uniform((1,), param_range[0], param_range[1])
+    return clip_tf(output, x_min, x_max)
+
+
+@tf.function
+def clip_tf(input, vmin, vmax):
+    output = tf.where(input<vmin, vmin, input)
+    output = tf.where(input>vmax, vmax, output)
+    return output
 
 
 class Lambda(tf.keras.layers.Layer):
@@ -224,12 +235,12 @@ def get_op_dict(augmentations):
         'contrast': random_contrast_tf,
         'brightness': random_brightness_tf,
         'noise': random_noise_tf,
-        'rotation': random_rotation_tf,
+        'rotation': random_90rotation_tf,
         'flip': random_flip_tf,
         'zoom': random_zoom_tf,
         'blur': random_blur_tf,
         }
-    
+
     ops_dict = {}
     if isinstance(augmentations, (list, tuple)):
         c = 0
