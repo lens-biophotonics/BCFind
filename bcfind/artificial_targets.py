@@ -1,17 +1,11 @@
-import os
-import h5py
-import argparse
 import numpy as np
 import pandas as pd
-import functools as ft
-import skimage.io as skio
 import scipy.ndimage.filters as sp_filt
 import scipy.spatial.distance as sp_dist
 
 from colorama import Fore as FG
 
-from bcfind.config_manager import Configuration
-from bcfind.utils import preprocessing, iround
+from bcfind.utils import iround
 
 
 def get_target(
@@ -116,122 +110,3 @@ def get_target(
         target = target / target.max()
 
     return target
-
-
-def get_input(tif_path, preprocessing_fun=None):
-    img = skio.imread(tif_path)
-    if preprocessing_fun is not None:
-        img = preprocessing_fun(img)
-    return img
-
-
-def make_train_data(
-    tif_dir, 
-    marker_dir, 
-    outdir, 
-    data_shape, 
-    preprocessing_fun, 
-    dim_resolution, 
-    downscale_factors
-    ):
-    tifnames = [
-        f
-        for f in os.listdir(tif_dir)
-        if f.endswith(".tif") or f.endswith(".tiff")
-    ]
-    n = len(tifnames)
-
-    np.save(f"{outdir}/train_files.npy", np.array(tifnames))
-
-    x_file = f"{outdir}/X_train.h5"
-    y_file = f"{outdir}/Y_train.h5"
-
-    fx = h5py.File(x_file, "w")
-    fy = h5py.File(y_file, "w")
-
-    print("Creating x dataset")
-    fx.create_dataset(
-        name="x", data=np.zeros((n, *data_shape), dtype="float32")
-    )
-    print("Creating y dataset")
-    fy.create_dataset(
-        name="y", data=np.zeros((n, *data_shape), dtype="float32")
-    )
-
-    print("Filling in..")
-    for i, fname in enumerate(tifnames):
-        tif_path = f"{tif_dir}/{fname}"
-        marker_path = f"{marker_dir}/{fname}.marker"
-
-        image = get_input(tif_path, preprocessing_fun)
-
-        try:
-            target = get_target(
-                marker_path,
-                data_shape,
-                default_radius=3.5,  # FIXME: not yet configurable
-                safe_factor=3.5,  # FIXME: not yet configurable
-                dim_resolution=dim_resolution,
-                downscale_factors=downscale_factors,
-                verbose=True,
-            )
-        except FileNotFoundError:
-            print(
-                FG.RED,
-                f"File .marker for {fname} not found. "
-                "Assumed without neurons. "
-                "Black target returned.",
-                FG.RESET,
-            )
-            target = np.zeros(data_shape)
-
-        fx["x"][i, ...] = image.astype("float32")
-        fy["y"][i, ...] = target.astype("float32")
-
-    fx.close()
-    fy.close()
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        prog="make_training_data.py",
-        formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(
-            prog, max_help_position=52, width=90
-        ),
-    )
-    parser.add_argument(
-        "config",
-        type=str,
-        help="Path to .yaml file containing the needed configuration settings",
-    )
-    return parser.parse_args()
-
-
-def main():
-    args = parse_args()
-    conf = Configuration(args.config)
-    os.makedirs(conf.exp.h5_dir, exist_ok=True)
-
-    preproc_fun = ft.partial(
-        preprocessing,
-        transpose=conf.preproc.transpose,
-        flip_axis=conf.preproc.flip_axis,
-        clip_threshold=conf.preproc.clip_threshold,
-        gamma_correction=conf.preproc.gamma_correction,
-        downscale_factors=conf.preproc.downscale,
-        pad_output_shape=conf.data.data_shape,
-    )
-
-    make_train_data(
-        conf.data.train_tif_dir, 
-        conf.data.train_gt_dir,
-        conf.exp.h5_dir, 
-        conf.data.data_shape,
-        preproc_fun,
-        conf.data.dim_resolution,
-        conf.preproc.downscale_factors)
-
-
-if __name__ == "__main__":
-    main()
