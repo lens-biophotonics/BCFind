@@ -18,33 +18,39 @@ def get_target(
     marker_path,
     target_shape,
     default_radius=3.5,
-    safe_factor=3.0,
+    safe_factor=3.5,
     dim_resolution=1,
     downscale_factors=None,
+    verbose=False,
 ):
     # Radius to be used when cells are sufficiently far away
     # Radius should be never larger than distance to the nearest neighbor divided by this quantity
     # default_radius *= dim_resolution
-
-    df = pd.read_csv(open(marker_path, "r"))[["#x", " y", " z"]]
+    df = pd.read_csv(open(str(marker_path), "r"))
+    df = df.iloc[:, :3]
     df = df.dropna(0)
+    df = df[(df.iloc[:, 0]<target_shape[0]) & (df.iloc[:, 1]<target_shape[1]) & (df.iloc[:, 2]<target_shape[2])]
+    df = df[(df.iloc[:, 0]>0) & (df.iloc[:, 1]>0) & (df.iloc[:, 2]>0)]
 
-    X = np.fliplr(df.to_numpy())
+    X = df.to_numpy()
     if downscale_factors is not None:
         X *= downscale_factors
 
     # X_um = X * dim_resolution
 
     if X.shape[0] == 0:
-        print(
-            FG.RED,
-            f"Marker file {marker_path} is empty. Black target returned.",
-            FG.RESET,
-        )
+        if verbose:
+            print(
+                FG.RED,
+                f"Marker file {marker_path} is empty. Black target returned.",
+                FG.RESET,
+            )
         return np.zeros(target_shape)
 
     else:
-        print(FG.GREEN, "Processing file", marker_path, FG.RESET)
+        if verbose:
+            print(FG.GREEN, "Processing file", marker_path, FG.RESET)
+
         # D = cdist(X,X,'chebyshev')
         D = sp_dist.cdist(X, X, "euclidean")
         D = D + 1e30 * np.eye(D.shape[0])  # get rid of diagonal
@@ -70,7 +76,8 @@ def get_target(
             a = np.unravel_index(D.argmin(), D.shape)
 
         target = np.zeros(target_shape)
-        print("Looping on", len(set(radii.values())), "values of the radius")
+        if verbose:
+            print("Looping on", len(set(radii.values())), "values of the radius")
 
         # this could be slow especially if there are too many distinct radii
         for r in set(radii.values()):
@@ -89,21 +96,22 @@ def get_target(
 
                 component[c[0], c[1], c[2]] = 1
 
-            sigma = max(1.5, r / np.min(dim_resolution))
+            sigma = max(1, r / np.min(dim_resolution))
             dim_sigma = sigma / (dim_resolution / np.min(dim_resolution))
 
             component = sp_filt.gaussian_filter(
-                component, dim_sigma, truncate=2.5, mode="constant"
+                component, dim_sigma, truncate=2, mode="constant"
             )
             component = component / component.max()
 
             target = target + component
 
-            print(
-                f"---> Created component for radius {r}"
-                f" with sigma {sigma}"
-                f" for a total of {len(centers)} cells"
-            )
+            if verbose:
+                print(
+                    f"---> Created component for radius {r}"
+                    f" with sigma {dim_sigma}"
+                    f" for a total of {len(centers)} cells"
+                )
 
         target = target / target.max()
 
@@ -165,6 +173,7 @@ def make_train_data(
                 safe_factor=3.5,  # FIXME: not yet configurable
                 dim_resolution=dim_resolution,
                 downscale_factors=downscale_factors,
+                verbose=True,
             )
         except FileNotFoundError:
             print(
