@@ -1,16 +1,15 @@
 Dataset:
-    name           : 'my_data'
-    basepath       : '/path/to/my/data/folders'
-    data_shape     : [160, 480, 480]
+    name           : my_data
+    basepath       : /path/to/my/data/folders
+    shape          : [160, 480, 480]
     dim_resolution : [2., .65, .65]
     marker_columns : [' z', ' y', '#x']
 
 Experiment:
-    name           : 'my_exp'
-    basepath       : '/path/to/my/experiment/outputs'
+    name           : my_exp
+    basepath       : /path/to/my/experiment/outputs
 
 PreProcessing:
-    transpose         : [2, 1, 0]
     flip_axis         : 1
     clip_threshold    : 8192
     gamma_correction  : 1.2
@@ -19,29 +18,50 @@ PreProcessing:
     standardization   : null
 
 DataAugmentation:
-    augment      : true
-    gamma        : [0.5, 1.8]
-    contrast     : null
-    brightness   : [-0.1, 0.1]
-    zoom         : [1.0, 1.3]
-    gauss_filter : [0.5, 2]
-    noise        : [0.05, 0.15]
+    augment: true
+    gamma: 
+        param_range     : [0.8, 1.2]
+        p               : 0.3
+    # contrast: 
+    #     param_range     : [1., 3.]
+    #     p               : 0.3
+    brightness: 
+        param_range     : [-0.06, 0.06]
+        p               : 0.3
+    # zoom: 
+    #     param_range     : [1.0, 1.1]
+    #     order           : 1
+    #     p               : 0.3
+    blur:
+        param_range     : [0., 0.5]
+        p               : 0.3
+    noise:
+        param_range     : [0., 0.03]
+        p               : 0.3
+    # rotation:
+    #     param_range     : [0., 270.]
+    #     axes            : [-2, -1]
+    #     p               : 0.3
+    flip:
+        axes            : [-2]
+        p               : 0.3
 
 UNet:
-    val_fold       : '1/4'
-    val_seed       : 123
-    input_shape    : [240, 240, 80]
-    exclude_border : [10, 10, 3]
-    epochs         : 3000
-    batch_size     : 10
+    input_shape    : [80, 240, 240]
+    exclude_border : [3, 10, 10]
+    epochs         : 1500
+    batch_size     : 4
     learning_rate  : 0.001
+    add_dice       : False
     n_filters      : 32
-    k_size         : [5, 5, 3]
+    k_size         : [3, 5, 5]
     k_stride       : [2, 2, 2]
+    dropout        : null
+    regularizer    : null
 
 DoG:
     iterations     : 40
-    exclude_border : [10, 10, 3]
+    exclude_border : [3, 10, 10]
     max_match_dist : 10
     n_cpu          : 1
 
