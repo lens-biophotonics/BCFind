@@ -25,7 +25,9 @@ cloudpickle==2.0.0
 colorama==0.4.4
     # via -r requirements.in
 coloredlogs==15.0.1
-    # via zetastitcher
+    # via
+    #   -r requirements.in
+    #   zetastitcher
 cucim==21.10.1
     # via -r requirements.in
 cupy-cuda112==9.6.0
@@ -89,7 +91,9 @@ llvmlite==0.37.0
 markdown==3.3.6
     # via tensorboard
 matplotlib==3.5.0
-    # via scikit-image
+    # via
+    #   -r requirements.in
+    #   scikit-image
 networkx==2.6.3
     # via
     #   -r requirements.in
@@ -208,6 +212,8 @@ scs==2.1.4
     # via cvxpy
 setuptools-scm==6.3.2
     # via matplotlib
+simpleitk==2.1.1.2
+    # via -r requirements.in
 six==1.16.0
     # via
     #   absl-py
