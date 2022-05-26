@@ -1,5 +1,7 @@
 import os
 import json
+import lmdb
+import pickle
 import cupy as cp
 import numpy as np
 import pandas as pd
@@ -9,7 +11,7 @@ import concurrent.futures as cf
 import cucim.skimage.filters as cm_skim_filt
 import cucim.skimage.feature as cm_skim_feat
 
-import skimage.feature.blob as skblob
+from scipy import spatial
 
 from bcfind.bipartite_match import bipartite_match
 from bcfind.utils import metrics, remove_border_points_from_array
@@ -19,9 +21,172 @@ mempool = cp.get_default_memory_pool()
 pinned_mempool = cp.get_default_pinned_memory_pool()
 
 
+def _compute_disk_overlap(d, r1, r2):
+    """
+    Compute fraction of surface overlap between two disks of radii
+    ``r1`` and ``r2``, with centers separated by a distance ``d``.
+    Parameters
+    ----------
+    d : float
+        Distance between centers.
+    r1 : float
+        Radius of the first disk.
+    r2 : float
+        Radius of the second disk.
+    Returns
+    -------
+    fraction: float
+        Fraction of area of the overlap between the two disks.
+    """
+
+    ratio1 = (d ** 2 + r1 ** 2 - r2 ** 2) / (2 * d * r1)
+    ratio1 = np.clip(ratio1, -1, 1)
+    acos1 = np.arcsin(ratio1)
+
+    ratio2 = (d ** 2 + r2 ** 2 - r1 ** 2) / (2 * d * r2)
+    ratio2 = np.clip(ratio2, -1, 1)
+    acos2 = np.arcsin(ratio2)
+
+    a = -d + r2 + r1
+    b = d - r2 + r1
+    c = d + r2 - r1
+    d = d + r2 + r1
+    area = (r1 ** 2 * acos1 + r2 ** 2 * acos2 -
+            0.5 * np.sqrt(abs(a * b * c * d)))
+    return area / (np.pi * (min(r1, r2) ** 2))
+
+
+def _compute_sphere_overlap(d, r1, r2):
+    """
+    Compute volume overlap fraction between two spheres of radii
+    ``r1`` and ``r2``, with centers separated by a distance ``d``.
+    Parameters
+    ----------
+    d : float
+        Distance between centers.
+    r1 : float
+        Radius of the first sphere.
+    r2 : float
+        Radius of the second sphere.
+    Returns
+    -------
+    fraction: float
+        Fraction of volume of the overlap between the two spheres.
+    Notes
+    -----
+    See for example http://mathworld.wolfram.com/Sphere-SphereIntersection.html
+    for more details.
+    """
+    vol = (np.pi / (12 * d) * (r1 + r2 - d)**2 *
+           (d**2 + 2 * d * (r1 + r2) - 3 * (r1**2 + r2**2) + 6 * r1 * r2))
+    return vol / (4./3 * np.pi * min(r1, r2) ** 3)
+
+
+def _blob_overlap(blob1, blob2, *, sigma_dim=1):
+    """Finds the overlapping area fraction between two blobs.
+    Returns a float representing fraction of overlapped area. Note that 0.0
+    is *always* returned for dimension greater than 3.
+    Parameters
+    ----------
+    blob1 : sequence of arrays
+        A sequence of ``(row, col, sigma)`` or ``(pln, row, col, sigma)``,
+        where ``row, col`` (or ``(pln, row, col)``) are coordinates
+        of blob and ``sigma`` is the standard deviation of the Gaussian kernel
+        which detected the blob.
+    blob2 : sequence of arrays
+        A sequence of ``(row, col, sigma)`` or ``(pln, row, col, sigma)``,
+        where ``row, col`` (or ``(pln, row, col)``) are coordinates
+        of blob and ``sigma`` is the standard deviation of the Gaussian kernel
+        which detected the blob.
+    sigma_dim : int, optional
+        The dimensionality of the sigma value. Can be 1 or the same as the
+        dimensionality of the blob space (2 or 3).
+    Returns
+    -------
+    f : float
+        Fraction of overlapped area (or volume in 3D).
+    """
+    ndim = len(blob1) - sigma_dim
+    if ndim > 3:
+        return 0.0
+    root_ndim = np.sqrt(ndim)
+
+    # we divide coordinates by sigma * sqrt(ndim) to rescale space to isotropy,
+    # giving spheres of radius = 1 or < 1.
+    if blob1[-1] == blob2[-1] == 0:
+        return 0.0
+    elif blob1[-1] > blob2[-1]:
+        max_sigma = blob1[-sigma_dim:]
+        r1 = 1
+        r2 = blob2[-1] / blob1[-1]
+    else:
+        max_sigma = blob2[-sigma_dim:]
+        r2 = 1
+        r1 = blob1[-1] / blob2[-1]
+    pos1 = blob1[:ndim] / (max_sigma * root_ndim)
+    pos2 = blob2[:ndim] / (max_sigma * root_ndim)
+
+    d = np.sqrt(np.sum((pos2 - pos1)**2))
+    if d > r1 + r2:  # centers farther than sum of radii, so no overlap
+        return 0.0
+
+    # one blob is inside the other
+    if d <= abs(r1 - r2):
+        return 1.0
+
+    if ndim == 2:
+        return _compute_disk_overlap(d, r1, r2)
+
+    else:  # ndim=3 http://mathworld.wolfram.com/Sphere-SphereIntersection.html
+        return _compute_sphere_overlap(d, r1, r2)
+
+
+
+def _prune_blobs(blobs_array, overlap, *, sigma_dim=1):
+    """Eliminates blobs with area overlap.
+    
+    Parameters
+    ----------
+    blobs_array : ndarray
+        A 2d array with each row representing 3 (or 4) values,
+        ``(row, col, sigma)`` or ``(pln, row, col, sigma)`` in 3D,
+        where ``(row, col)`` (``(pln, row, col)``) are coordinates of the blob
+        and ``sigma`` is the standard deviation of the Gaussian kernel which
+        detected the blob.
+        This array must not have a dimension of size 0.
+    overlap : float
+        A value between 0 and 1. If the fraction of area overlapping for 2
+        blobs is greater than `overlap` the smaller blob is eliminated.
+    sigma_dim : int, optional
+        The number of columns in ``blobs_array`` corresponding to sigmas rather
+        than positions.
+    Returns
+    -------
+    A : ndarray
+        `array` with overlapping blobs removed.
+    """
+    sigma = blobs_array[:, -sigma_dim:].max()
+    distance = 2 * sigma * np.sqrt(blobs_array.shape[1] - sigma_dim)
+    tree = spatial.cKDTree(blobs_array[:, :-sigma_dim])
+    pairs = np.array(list(tree.query_pairs(distance)))
+    if len(pairs) == 0:
+        return blobs_array
+    else:
+        for (i, j) in pairs:
+            blob1, blob2 = blobs_array[i], blobs_array[j]
+            if _blob_overlap(blob1, blob2, sigma_dim=sigma_dim) > overlap:
+                # note: this test works even in the anisotropic case because
+                # all sigmas increase together.
+                if blob1[-1] > blob2[-1]:
+                    blob2[-1] = 0
+                else:
+                    blob1[-1] = 0
+
+    return np.stack([b for b in blobs_array if b[-1] > 0])
+
 def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
     r""" Equivalent function to skimage.feature.blob_dog which runs on the GPU, making computation 10 times faster.
-
+    
     Finds blobs in the given grayscale image.
     Blobs are found using the Difference of Gaussian (DoG) method [1]_.
     For each blob found, the method returns its coordinates and the standard
@@ -45,13 +210,13 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
         The ratio between the standard deviation of Gaussian Kernels used for
         computing the Difference of Gaussians
     threshold_rel : float, optional.
-        A value between 0 and 1. The relative lower bound for scale space maxima.
-        Local maxima smaller than max(image) * thresh are ignored.
+        A value between 0 and 1. The relative lower bound for scale space maxima. 
+        Local maxima smaller than max(image) * thresh are ignored. 
         Reduce this to detect blobs with less intensities.
     overlap : float, optional
         A value between 0 and 1. If the area of two blobs overlaps by a
         fraction greater than `threshold`, the smaller blob is eliminated.
-
+    
     Returns
     -------
     A : (n, image.ndim + sigma) ndarray
@@ -83,7 +248,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
         max_sigma = np.array([max_sigma] * image.ndim)
     else:
         max_sigma = np.array(max_sigma)
-
+    
     # k such that min_sigma*(sigma_ratio**k) > max_sigma
     k = int(np.mean(np.log(max_sigma / min_sigma) / np.log(sigma_ratio) + 1))
 
@@ -97,7 +262,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
         low = cm_skim_filt.gaussian(image, sigma_list[i])
         high = cm_skim_filt.gaussian(image, sigma_list[i + 1])
         dog_image = (low - high) * cp.mean(sigma_list[i])
-
+        
         lm = cm_skim_feat.peak_local_max(
             dog_image,
             threshold_rel=threshold_rel,
@@ -105,7 +270,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
         )
         lm = cp.c_[lm, cp.ones(lm.shape[0]) * i]
         detected_blobs.append(lm)
-
+    
     detected_blobs = cp.concatenate(detected_blobs)
     detected_blobs = cp.asnumpy(detected_blobs).astype("float32")
 
@@ -129,7 +294,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
     detected_blobs = np.hstack([detected_blobs[:, :-1], sigmas_of_peaks])
 
     sigma_dim = sigmas_of_peaks.shape[1]
-    detected_blobs = skblob._prune_blobs(detected_blobs, overlap, sigma_dim=sigma_dim)
+    detected_blobs = _prune_blobs(detected_blobs, overlap, sigma_dim=sigma_dim)
 
     return detected_blobs
 
@@ -174,16 +339,19 @@ class BlobDoG:
 
         Args:
             x (ndarray): Image array. Can be 2 or 3 dimensional.
-            parameters (dict, optional): Dictionary of blob detection parameters.
+            parameters (dict, optional): Dictionary of blob detection parameters. 
                 Expected keys are: [`min_rad`, `max_rad`, `sigma_ratio`, `overlap`, `threshold`].
                 Defaults to None will assign default or previously setted parameters.
 
         Returns:
-            [ndarray]: 2 dimensional array with shape [n_blobs, (n_dim + len(dim_resolution))].
+            [ndarray]: 2 dimensional array with shape [n_blobs, (n_dim + len(dim_resolution))]. 
                 First `n_dim` columns are the coordinates of each detected blob, last columns are the standard deviations
                 which detected the blob. For isotropic images (len(dim_resolution)=1) a single standard deviation is returned,
                 for anysotropic images (len(dim_resolution)==n_dim) the standard deviation of each axis is returned.
         """
+        if type(x) == bytes:
+            x = pickle.loads(x)
+    
         if parameters is None:
             min_sigma = (self.min_rad / self.dim_resolution) / np.sqrt(self.D)
             max_sigma = (self.max_rad / self.dim_resolution) / np.sqrt(self.D)
@@ -222,18 +390,18 @@ class BlobDoG:
         Args:
             y_pred (ndarray): 2 dimensional array of shape [n_blobs, n_dim] of predicted blobs
             y_true (ndarray): 2 dimensional array of shape [n_blobs, n_dim] of true blobs
-            max_match_dist (scalar): maximum distance between predicted and true blobs for a correct prediction.
-                It must be in the same scale as dim_resolution.
-            evaluation_type (str, optional): One of ["complete", "counts", "f1", "acc", "prec", "rec"].
+            max_match_dist (scalar): maximum distance between predicted and true blobs for a correct prediction. 
+                It must be in the same scale as dim_resolution. 
+            evaluation_type (str, optional): One of ["complete", "counts", "f1", "acc", "prec", "rec"]. 
                 "complete" returns every centroid labelled as TP, FP, or FN.
-                "counts" returns only the counts of TP, FP, FN plus the total number of predicted blobs
+                "counts" returns only the counts of TP, FP, FN plus the total number of predicted blobs 
                 and the total number of true blobs.
                 "f1", "acc", "prec", "rec" returns only the requested metric evaluation.
                 Defaults to "complete".
 
         Returns:
             [pandas.DataFrame or scalar]: if evaluation_type = "complete" returns a pandas.DataFrame with every centroid
-                labelled as TP, FP, or FN. If evaluation_type = "counts" returns a pandas.DataFrame with the counts of TP, FP, FN,
+                labelled as TP, FP, or FN. If evaluation_type = "counts" returns a pandas.DataFrame with the counts of TP, FP, FN, 
                 the total number of predicted blobs and the total number of true blobs.
                 if evaluation_type is one of ["f1", "acc", "prec", "rec"] returns the scalar of requested metric.
         """
@@ -261,11 +429,11 @@ class BlobDoG:
                 return metrics(eval_counts)[evaluation_type]
 
     def predict_and_evaluate(
-        self,
-        x,
-        y,
-        max_match_dist,
-        evaluation_type="complete",
+        self, 
+        x, 
+        y, 
+        max_match_dist, 
+        evaluation_type="complete", 
         parameters=None,
     ):
         """Predicts blob coordinates from x and evaluates the result with the true coordinates in y.
@@ -274,42 +442,50 @@ class BlobDoG:
         Args:
             x (ndarray): array of n_dim dimensions
             y (ndarray): 2 dimensional array with shape [n_blobs, n_dim] of true blobs coordinates
-            max_match_dist (scalar): maximum distance between predicted and true blobs for a correct prediction.
+            max_match_dist (scalar): maximum distance between predicted and true blobs for a correct prediction. 
                 It must be in the same scale as dim_resolution.
-            evaluation_type (str, optional): One of ["complete", "counts", "f1", "acc", "prec", "rec"].
+            evaluation_type (str, optional): One of ["complete", "counts", "f1", "acc", "prec", "rec"]. 
                 "complete" returns every centroid labelled as TP, FP, or FN.
-                "counts" returns only the counts of TP, FP, FN plus the total number of predicted blobs
+                "counts" returns only the counts of TP, FP, FN plus the total number of predicted blobs 
                 and the total number of true blobs.
                 "f1", "acc", "prec", "rec" returns only the requested metric evaluation.
                 Defaults to "complete".
-            parameters (dict, optional): Dictionary of blob detection parameters.
+            parameters (dict, optional): Dictionary of blob detection parameters. 
                 Expected keys are: [`min_rad`, `max_rad`, `sigma_ratio`, `overlap`, `threshold`].
                 Defaults to None will assign default or previously setted parameters.
 
         Returns:
             [type]: [description]
         """
+        if type(x) == bytes:
+            x = pickle.loads(x)
+
         if self.exclude_border is not None:
             y = remove_border_points_from_array(
                 y, x.shape, self.exclude_border
             )
-
+        
         x = x.astype('float32')
+
         centers = self.predict(x, parameters)
+        
         evaluation = self.evaluate(
             centers, y, max_match_dist=max_match_dist, evaluation_type=evaluation_type
         )
         return evaluation
 
     def _objective(
-        self,
-        parameters,
-        X,
-        Y,
-        max_match_dist,
-        checkpoint_dir=None,
+        self, 
+        parameters, 
+        X, 
+        Y, 
+        max_match_dist, 
+        checkpoint_dir=None, 
         n_cpu=1,
     ):
+        if isinstance(X, lmdb.Cursor):
+            X = X.iternext(keys=False)
+
         self.train_step += 1
         parameters["max_rad"] = parameters["min_rad"] + parameters["min_max_rad_diff"]
 
@@ -336,7 +512,6 @@ class BlobDoG:
                     for x, y in zip(X, Y)
                 ]
                 res = [future.result() for future in cf.as_completed(futures)]
-
 
         res = pd.concat(res)
         f1 = metrics(res)["f1"]
@@ -372,7 +547,7 @@ class BlobDoG:
         Args:
             X (iterable): Iterable of n_dim dimensional images. Length of X must be equal to lenght of Y.
             Y (iterable): Iterable of ndarrays of true blob coordinates. Length of Y must be equal to lenght of X.
-                max_match_dist (scalar): Maximum distance between predicted and true blobs for a correct prediction.
+            max_match_dist (scalar): Maximum distance between predicted and true blobs for a correct prediction. 
                 It must be in the same scale as dim_resolution.
             n_iter (int, optional): Number of TPE iterations to perform. Defaults to 60.
             checkpoint_dir (str, optional): Path to the directory where saving the parameters during training. Defaults to None.
@@ -397,9 +572,9 @@ class BlobDoG:
         }
 
         best_par = ho.fmin(
-            fn=obj_wrapper,
-            space=search_space,
-            algo=ho.tpe.suggest,
+            fn=obj_wrapper, 
+            space=search_space, 
+            algo=ho.tpe.suggest, 
             max_evals=n_iter,
         )
 

@@ -1,6 +1,8 @@
 import os
-import h5py
+from typing import Iterator
+import lmdb
 import json
+import pickle
 import shutil
 import argparse
 
@@ -66,8 +68,8 @@ def main():
         ordered_tiff_list.append(str(tiff_file[0]))
 
     data = TrainingDataset(
-        tiff_list=ordered_tiff_list[:10], 
-        marker_list=marker_list[:10], 
+        tiff_list=ordered_tiff_list, 
+        marker_list=marker_list, 
         batch_size=conf.unet.batch_size, 
         dim_resolution=conf.data.dim_resolution, 
         output_shape=conf.unet.input_shape, 
@@ -144,55 +146,57 @@ def main():
         Y.append(np.array(y))
 
     print(f"Saving U-Net predictions in {conf.exp.basepath}/Train_pred.h5")
-    fx = h5py.File(f'{conf.exp.basepath}/Train_pred.h5', "w")
-    fx.create_dataset(name="y_hat", data=np.zeros([len(marker_list), *conf.data.shape]), dtype="float32")
 
-    for i, tiff_file in enumerate(ordered_tiff_list):
-        print(f"Unet prediction on file {i+1}/{len(marker_list)}")
-        
-        x = get_input_tf(tf.constant(tiff_file))
-        x = normalize_tf(x)        
-        x = x[tf.newaxis, ..., tf.newaxis]
+    n = len(marker_list)
+    nbytes = np.prod(conf.data.shape) * 4
+    db = lmdb.open(f'{conf.exp.basepath}/Train_pred_lmdb', map_size=n*nbytes*10)
 
-        max_attempts = 10
-        attempts = 0
-        while True:
-            try:
-                pred = unet(x, training=False)
-                break
-            except tf.errors.InvalidArgumentError as e:
-                print('Invalid input shape for concat layer. Need padding')
-                attempts += 1
-                if attempts % 2 != 0:
-                    paddings = tf.constant([[0, 0], [0, 1], [0, 0], [0, 0], [0, 0]])
-                else:
-                    paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 1], [0, 0]])
-                
-                x = tf.pad(x, paddings)
-                if attempts == max_attempts:
-                    raise e
+    with db.begin(write=True) as fx:
+        for i, tiff_file in enumerate(ordered_tiff_list):
+            print(f"Unet prediction on file {i+1}/{len(marker_list)}")
+            
+            x = get_input_tf(tf.constant(tiff_file))
+            x = normalize_tf(x)        
+            x = x[tf.newaxis, ..., tf.newaxis]
 
-        pred = sigmoid(tf.squeeze(pred))
-        p_shape = pred.shape
-        
-        fx["y_hat"][i, :p_shape[0], :p_shape[1], :p_shape[2]] = (pred * 255).astype("float32")
+            max_attempts = 10
+            attempts = 0
+            while True:
+                try:
+                    pred = unet(x, training=False)
+                    break
+                except tf.errors.InvalidArgumentError as e:
+                    attempts += 1
+                    if attempts % 2 != 0:
+                        print('Invalid input shape for concat layer. Try padding axis 1')
+                        paddings = tf.constant([[0, 0], [0, 1], [0, 0], [0, 0], [0, 0]])
+                    else:
+                        print('Invalid input shape for concat layer. Try padding axes [2, 3]')
+                        paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 1], [0, 0]])
+                    
+                    x = tf.pad(x, paddings)
+                    if attempts == max_attempts:
+                        raise e
 
-    X = fx["y_hat"][:]
-    fx.close()
+            pred = sigmoid(tf.squeeze(pred)) * 255
+            
+            fx.put(key=f'{i:03}'.encode(), value=pickle.dumps(pred))
 
     ####################################
     ############### DOG ################
     ####################################
-    dog = BlobDoG(3, conf.data.dim_resolution, np.array(conf.dog.exclude_border) + conf.unet.exclude_border)
+    dog = BlobDoG(3, conf.data.dim_resolution, conf.dog.exclude_border)
+    with db.begin() as fx:
+        X = fx.cursor()
 
-    dog = dog.fit(
-        X=X,
-        Y=Y,
-        max_match_dist=conf.dog.max_match_dist,
-        n_iter=conf.dog.iterations,
-        checkpoint_dir=conf.dog.checkpoint_dir,
-        n_cpu=conf.dog.n_cpu,
-    )
+        dog.fit(
+            X=X,
+            Y=Y,
+            max_match_dist=conf.dog.max_match_dist,
+            n_iter=conf.dog.iterations,
+            checkpoint_dir=conf.dog.checkpoint_dir,
+            n_cpu=conf.dog.n_cpu,
+        )
 
     dog_par = dog.get_parameters()
     print(f"Best parameters found for DoG: {dog_par}")
@@ -200,6 +204,11 @@ def main():
     with open(f"{conf.dog.checkpoint_dir}/parameters.json", "w") as outfile:
         json.dump(dog_par, outfile)
 
+    db.close()
 
 if __name__ == '__main__':
+    gpus = tf.config.list_physical_devices('GPU')
+    tf.config.set_visible_devices(gpus[1], 'GPU')
+    tf.config.experimental.set_memory_growth(gpus[1], True)
+
     main()

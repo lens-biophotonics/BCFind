@@ -60,33 +60,24 @@ class Configuration:
             self.data_aug.op_args = {}
             self.data_aug.op_probs = []
             
-            for k, v in self.data_aug.items():
-                if k not in ['augment', 'op_args', 'op_probs']:
-                    self.data_aug.op_args[k] = v
-                    self.data_aug.op_probs.append(v['p'])
-                    del self.data_aug.op_args[k]['p']
+            for key, value in self.data_aug.items():
+                if key not in ['augment', 'op_args', 'op_probs']:
+                    self.data_aug.op_args[key] = value
+                    self.data_aug.op_probs.append(value['p'])
+                    del self.data_aug.op_args[key]['p']
         else:
             self.data_aug.op_args = None
             self.data_aug.op_probs = None
 
         # UNet
-        self.unet.input_shape = self.unet.input_shape
-
-        self.unet.checkpoint_dir = (
-            f"{self.exp.basepath}/UNet_checkpoint"
-        )
-        self.unet.tensorboard_dir = (
-            f"{self.exp.basepath}/UNet_tensorboard"
-        )
+        self.unet.checkpoint_dir = f"{self.exp.basepath}/UNet_checkpoint"
+        self.unet.tensorboard_dir = f"{self.exp.basepath}/UNet_tensorboard"
 
         # DoG
         self.dog.exclude_border = np.array(self.unet.exclude_border) + self.dog.exclude_border
 
-        self.dog.logs_dir = f"{self.exp.basepath}/{self.exp.name}/DoG_logs"
-        self.dog.checkpoint_dir = f"{self.exp.basepath}/{self.exp.name}/DoG_checkpoint"
-        self.dog.predictions_dir = (
-            f"{self.exp.basepath}/{self.exp.name}/{self.data.name}_predictions"
-        )
+        self.dog.checkpoint_dir = f"{self.exp.basepath}/DoG_checkpoint"
+        self.dog.predictions_dir = f"{self.exp.basepath}/{self.data.name}_predictions"
 
         # VirtualFusedVolume
         self.vfv.sub_shape = np.array(self.vfv.sub_shape)
