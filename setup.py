@@ -26,9 +26,8 @@ setup(
     # pip to create the appropriate form of executable for the target platform.
     entry_points={
         "console_scripts": [
-            "bcfind-make-data = bcfind.make_training_data:main",
             "bcfind-train = bcfind.train:main",
-            "bcfind-evaluate = bcfind.evaluate_train:main",
+            "bcfind-test = bcfind.test:main",
             "bcfind-vfv-pred = bcfind.vfv_pred:main"
         ],
     },

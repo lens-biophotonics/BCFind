@@ -4,7 +4,7 @@
 #
 #    pip-compile requirements.in
 #
-absl-py==1.0.0
+absl-py==0.15.0
     # via
     #   tensorboard
     #   tensorflow
@@ -25,9 +25,7 @@ cloudpickle==2.0.0
 colorama==0.4.4
     # via -r requirements.in
 coloredlogs==15.0.1
-    # via
-    #   -r requirements.in
-    #   zetastitcher
+    # via zetastitcher
 cucim==21.10.1
     # via -r requirements.in
 cupy-cuda112==9.6.0
@@ -40,7 +38,7 @@ ecos==2.0.7.post1
     # via cvxpy
 fastrlock==0.8
     # via cupy-cuda112
-flatbuffers==2.0
+flatbuffers==1.12
     # via tensorflow
 fonttools==4.28.2
     # via matplotlib
@@ -56,12 +54,14 @@ google-auth-oauthlib==0.4.6
     # via tensorboard
 google-pasta==0.2.0
     # via tensorflow
-grpcio==1.42.0
+grpcio==1.34.1
     # via
     #   tensorboard
     #   tensorflow
-h5py==3.6.0
-    # via tensorflow
+h5py==3.1.0
+    # via
+    #   -r requirements.in
+    #   tensorflow
 humanfriendly==10.0
     # via coloredlogs
 humanize==3.12.0
@@ -76,24 +76,18 @@ imageio==2.12.0
     #   zetastitcher
 importlib-metadata==4.8.2
     # via markdown
-keras==2.7.0
+keras-nightly==2.5.0.dev2021032900
     # via tensorflow
 keras-preprocessing==1.1.2
     # via tensorflow
 kiwisolver==1.3.2
     # via matplotlib
-libclang==12.0.0
-    # via tensorflow
 llvmlite==0.37.0
     # via numba
-lmdb==1.3.0
-    # via -r requirements.in
 markdown==3.3.6
     # via tensorboard
 matplotlib==3.5.0
-    # via
-    #   -r requirements.in
-    #   scikit-image
+    # via scikit-image
 networkx==2.6.3
     # via
     #   -r requirements.in
@@ -102,7 +96,7 @@ networkx==2.6.3
     #   zetastitcher
 numba==0.54.1
     # via -r requirements.in
-numpy==1.20.3
+numpy==1.19.5
     # via
     #   cucim
     #   cupy-cuda112
@@ -196,7 +190,7 @@ rsa==4.8
     # via google-auth
 scikit-image==0.18.3
     # via -r requirements.in
-scipy==1.7.3
+scipy==1.4.1
     # via
     #   -r requirements.in
     #   cvxpy
@@ -212,9 +206,7 @@ scs==2.1.4
     # via cvxpy
 setuptools-scm==6.3.2
     # via matplotlib
-simpleitk==2.1.1.2
-    # via -r requirements.in
-six==1.16.0
+six==1.15.0
     # via
     #   absl-py
     #   astunparse
@@ -235,11 +227,9 @@ tensorboard-data-server==0.6.1
     # via tensorboard
 tensorboard-plugin-wit==1.8.0
     # via tensorboard
-tensorflow==2.7
+tensorflow==2.5
     # via -r requirements.in
-tensorflow-estimator==2.7.0
-    # via tensorflow
-tensorflow-io-gcs-filesystem==0.22.0
+tensorflow-estimator==2.5.0
     # via tensorflow
 termcolor==1.1.0
     # via tensorflow
@@ -251,7 +241,7 @@ tomli==1.2.2
     # via setuptools-scm
 tqdm==4.62.3
     # via hyperopt
-typing-extensions==4.0.0
+typing-extensions==3.7.4.3
     # via tensorflow
 urllib3==1.26.7
     # via requests
@@ -262,7 +252,7 @@ wheel==0.37.0
     #   astunparse
     #   tensorboard
     #   tensorflow
-wrapt==1.13.3
+wrapt==1.12.1
     # via tensorflow
 zetastitcher==0.6.0
     # via -r requirements.in
