@@ -1,12 +1,12 @@
 colorama
 cucim
 cupy-cuda112
-h5py
+lmdb
 hyperopt
 networkx
 numba
 pandas
 scikit-image
 scipy
-tensorflow==2.5
+tensorflow>=2.5
 zetastitcher
