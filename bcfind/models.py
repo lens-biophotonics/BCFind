@@ -185,7 +185,7 @@ def UNet(input_shape, n_filters, k_size, k_stride, dropout=None, regularizer=Non
     if dropout:
         inv_conv_block_3 = tf.keras.layers.Dropout(dropout)(inv_conv_block_3)
     
-    inv_conv_block_4 = _decoder_block(inv_conv_block_3, None, 1, k_size, k_stride, 'linear', regularizer)
+    inv_conv_block_4 = _decoder_block(inv_conv_block_3, None, 1, k_size, k_stride, 'linear', None)
 
     return tf.keras.Model(inputs=inputs, outputs=inv_conv_block_4)
 
