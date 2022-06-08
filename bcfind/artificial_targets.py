@@ -1,3 +1,4 @@
+import json
 import numpy as np
 import pandas as pd
 import scipy.ndimage.filters as sp_filt
@@ -6,6 +7,23 @@ import scipy.spatial.distance as sp_dist
 from colorama import Fore as FG
 
 from bcfind.utils import iround
+
+
+def vaa3d_to_numpy(marker_path):
+    df = pd.read_csv(open(str(marker_path), "r"))
+    df = df.iloc[:, :3]
+    df = df.dropna(0)
+    return df.to_numpy()
+
+
+def slicer_to_numpy(marker_path):
+    with open(marker_path, 'r') as f:
+        markers = json.load(f)
+    X = []
+    control_points = markers['markups'][0]['controlPoints']
+    for cp in control_points:
+        X.append(cp['position'])
+    return np.array(X)
 
 
 def get_target(
@@ -20,17 +38,20 @@ def get_target(
     # Radius to be used when cells are sufficiently far away
     # Radius should be never larger than distance to the nearest neighbor divided by this quantity
     # default_radius *= dim_resolution
-    df = pd.read_csv(open(str(marker_path), "r"))
-    df = df.iloc[:, :3]
-    df = df.dropna(0)
-    df = df[(df.iloc[:, 0]<target_shape[0]) & (df.iloc[:, 1]<target_shape[1]) & (df.iloc[:, 2]<target_shape[2])]
-    df = df[(df.iloc[:, 0]>0) & (df.iloc[:, 1]>0) & (df.iloc[:, 2]>0)]
+    
+    if marker_path.suffix == '.marker':
+        X = vaa3d_to_numpy(marker_path)
+    elif marker_path.suffix == '.json':
+        X = slicer_to_numpy(marker_path)
+    else:
+        raise ValueError('marker_path is incompatible with known formats: Vaa3d (.marker) or 3DSlicer (.json).')
+    
+    # remove points outside the target shape
+    X = X[(X[:, 0]>0) & (X[:, 1]>0) & (X[:, 2]>0), :]
+    X = X[(X[:, 0]<target_shape[0]) & (X[:, 1]<target_shape[1]) & (X[:, 2]<target_shape[2]), :]
 
-    X = df.to_numpy()
     if downscale_factors is not None:
         X *= downscale_factors
-
-    # X_um = X * dim_resolution
 
     if X.shape[0] == 0:
         if verbose:
@@ -94,7 +115,7 @@ def get_target(
             dim_sigma = sigma / (dim_resolution / np.min(dim_resolution))
 
             component = sp_filt.gaussian_filter(
-                component, dim_sigma, truncate=2, mode="constant"
+                component, dim_sigma, truncate=4., mode="constant"
             )
             component = component / component.max()
 
