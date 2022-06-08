@@ -46,6 +46,8 @@ def get_target(
     else:
         raise ValueError('marker_path is incompatible with known formats: Vaa3d (.marker) or 3DSlicer (.json).')
     
+    X = X[:, [2, 1, 0]] # transpose axis from [x, y, z] to [z, y, x]
+
     # remove points outside the target shape
     X = X[(X[:, 0]>0) & (X[:, 1]>0) & (X[:, 2]>0), :]
     X = X[(X[:, 0]<target_shape[0]) & (X[:, 1]<target_shape[1]) & (X[:, 2]<target_shape[2]), :]

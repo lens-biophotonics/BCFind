@@ -78,10 +78,7 @@ class TrainingDataset(tf.data.Dataset):
         shape = tf.shape(input_image)
 
         logger.info(f'creating blobs from {marker_path}')
-        shape_T = [shape[d] for d in (2, 1, 0)]
-        dim_resolution_T = [dim_resolution[d] for d in (2, 1, 0)]
-        blobs = get_target_tf(marker_path, shape_T, dim_resolution_T)
-        blobs = tf.transpose(blobs, perm=(2, 1, 0))
+        blobs = get_target_tf(marker_path, shape, dim_resolution)
 
         xy = tf.concat([tf.expand_dims(input_image, 0), tf.expand_dims(blobs, 0)], axis=0)
         return tf.ensure_shape(xy, (2, None, None, None))
