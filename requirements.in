@@ -2,11 +2,12 @@ colorama
 cucim
 cupy-cuda112
 lmdb
+SimpleITK
 hyperopt
 networkx
 numba
 pandas
 scikit-image
 scipy
-tensorflow>=2.5
+tensorflow==2.9
 zetastitcher
