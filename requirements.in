@@ -9,5 +9,5 @@ numba
 pandas
 scikit-image
 scipy
-tensorflow==2.9
+tensorflow>=2.9,<2.10
 zetastitcher

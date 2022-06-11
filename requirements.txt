@@ -10,43 +10,39 @@ absl-py==1.1.0
     #   tensorflow
 astunparse==1.6.3
     # via tensorflow
-cachetools==4.2.4
+cachetools==5.2.0
     # via
     #   google-auth
     #   zetastitcher
-certifi==2021.10.8
+certifi==2022.5.18.1
     # via requests
-charset-normalizer==2.0.8
+charset-normalizer==2.0.12
     # via requests
-click==8.0.3
+click==8.1.3
     # via cucim
-cloudpickle==2.0.0
+cloudpickle==2.1.0
     # via hyperopt
 colorama==0.4.4
     # via -r requirements.in
 coloredlogs==15.0.1
     # via zetastitcher
-cucim==21.10.1
+cucim==22.6.0
     # via -r requirements.in
-cupy-cuda112==9.6.0
+cupy-cuda112==10.5.0
     # via -r requirements.in
-cvxpy==1.1.17
+cvxpy==1.2.1
     # via zetastitcher
-cycler==0.11.0
-    # via matplotlib
-ecos==2.0.7.post1
+ecos==2.0.10
     # via cvxpy
 fastrlock==0.8
     # via cupy-cuda112
 flatbuffers==1.12
     # via tensorflow
-fonttools==4.28.2
-    # via matplotlib
 future==0.18.2
     # via hyperopt
 gast==0.4.0
     # via tensorflow
-google-auth==2.3.3
+google-auth==2.7.0
     # via
     #   google-auth-oauthlib
     #   tensorboard
@@ -54,51 +50,48 @@ google-auth-oauthlib==0.4.6
     # via tensorboard
 google-pasta==0.2.0
     # via tensorflow
-grpcio==1.34.1
+grpcio==1.46.3
     # via
     #   tensorboard
     #   tensorflow
-h5py==3.1.0
+h5py==3.7.0
     # via tensorflow
 humanfriendly==10.0
     # via coloredlogs
-humanize==3.12.0
+humanize==4.1.0
     # via zetastitcher
 hyperopt==0.2.7
     # via -r requirements.in
 idna==3.3
     # via requests
-imageio==2.12.0
+imageio==2.19.3
     # via
+    #   pims
     #   scikit-image
     #   zetastitcher
-importlib-metadata==4.8.2
+importlib-metadata==4.11.4
     # via markdown
 keras==2.9.0
     # via tensorflow
 keras-preprocessing==1.1.2
     # via tensorflow
-kiwisolver==1.3.2
-    # via matplotlib
 libclang==14.0.1
     # via tensorflow
-llvmlite==0.37.0
+llvmlite==0.38.1
     # via numba
 lmdb==1.3.0
     # via -r requirements.in
-markdown==3.3.6
+markdown==3.3.7
     # via tensorboard
-matplotlib==3.5.0
-    # via scikit-image
-networkx==2.6.3
+networkx==2.8.3
     # via
     #   -r requirements.in
     #   hyperopt
     #   scikit-image
     #   zetastitcher
-numba==0.54.1
+numba==0.55.2
     # via -r requirements.in
-numpy==1.20.3
+numpy==1.22.4
     # via
     #   cucim
     #   cupy-cuda112
@@ -108,7 +101,6 @@ numpy==1.20.3
     #   hyperopt
     #   imageio
     #   keras-preprocessing
-    #   matplotlib
     #   numba
     #   opencv-python
     #   opt-einsum
@@ -125,37 +117,35 @@ numpy==1.20.3
     #   tensorflow
     #   tifffile
     #   zetastitcher
-oauthlib==3.1.1
+oauthlib==3.2.0
     # via requests-oauthlib
-opencv-python==4.5.4.60
+opencv-python==4.6.0.66
     # via zetastitcher
 opt-einsum==3.3.0
     # via tensorflow
-osqp==0.6.2.post0
+osqp==0.6.2.post5
     # via cvxpy
 packaging==21.3
     # via
-    #   matplotlib
-    #   setuptools-scm
+    #   scikit-image
     #   tensorflow
-pandas==1.3.4
+pandas==1.4.2
     # via
     #   -r requirements.in
     #   zetastitcher
-pillow==8.4.0
+pillow==9.1.1
     # via
     #   imageio
-    #   matplotlib
     #   scikit-image
-pims==0.5
+pims==0.6.1
     # via zetastitcher
-protobuf==3.19.1
+protobuf==3.19.4
     # via
     #   tensorboard
     #   tensorflow
-psutil==5.8.0
+psutil==5.9.1
     # via zetastitcher
-py4j==0.10.9.3
+py4j==0.10.9.5
     # via hyperopt
 pyasn1==0.4.8
     # via
@@ -163,37 +153,33 @@ pyasn1==0.4.8
     #   rsa
 pyasn1-modules==0.2.8
     # via google-auth
-pyparsing==3.0.6
-    # via
-    #   matplotlib
-    #   packaging
+pyparsing==3.0.9
+    # via packaging
 python-dateutil==2.8.2
-    # via
-    #   matplotlib
-    #   pandas
-pytz==2021.3
     # via pandas
-pywavelets==1.2.0
+pytz==2022.1
+    # via pandas
+pywavelets==1.3.0
     # via scikit-image
 pyyaml==6.0
     # via zetastitcher
-qdldl==0.1.5.post0
+qdldl==0.1.5.post2
     # via osqp
-qpsolvers==1.7.2
+qpsolvers==1.9.1
     # via zetastitcher
-quadprog==0.1.10
+quadprog==0.1.11
     # via qpsolvers
-requests==2.26.0
+requests==2.28.0
     # via
     #   requests-oauthlib
     #   tensorboard
-requests-oauthlib==1.3.0
+requests-oauthlib==1.3.1
     # via google-auth-oauthlib
 rsa==4.8
     # via google-auth
-scikit-image==0.18.3
+scikit-image==0.19.2
     # via -r requirements.in
-scipy==1.4.1
+scipy==1.8.1
     # via
     #   -r requirements.in
     #   cvxpy
@@ -205,13 +191,11 @@ scipy==1.4.1
     #   scikit-image
     #   scs
     #   zetastitcher
-scs==2.1.4
+scs==3.2.0
     # via cvxpy
-setuptools-scm==6.3.2
-    # via matplotlib
 simpleitk==2.1.1.2
     # via -r requirements.in
-six==1.15.0
+six==1.16.0
     # via
     #   astunparse
     #   google-auth
@@ -219,19 +203,17 @@ six==1.15.0
     #   grpcio
     #   hyperopt
     #   keras-preprocessing
-    #   pims
     #   python-dateutil
-    #   slicerator
     #   tensorflow
-slicerator==1.0.0
+slicerator==1.1.0
     # via pims
 tensorboard==2.9.1
     # via tensorflow
 tensorboard-data-server==0.6.1
     # via tensorboard
-tensorboard-plugin-wit==1.8.0
+tensorboard-plugin-wit==1.8.1
     # via tensorboard
-tensorflow==2.9
+tensorflow==2.9.1
     # via -r requirements.in
 tensorflow-estimator==2.9.0
     # via tensorflow
@@ -239,29 +221,27 @@ tensorflow-io-gcs-filesystem==0.26.0
     # via tensorflow
 termcolor==1.1.0
     # via tensorflow
-tifffile==2021.11.2
+tifffile==2022.5.4
     # via
     #   scikit-image
     #   zetastitcher
-tomli==1.2.2
-    # via setuptools-scm
-tqdm==4.62.3
+tqdm==4.64.0
     # via hyperopt
-typing-extensions==3.7.4.3
+typing-extensions==4.2.0
     # via tensorflow
-urllib3==1.26.7
+urllib3==1.26.9
     # via requests
-werkzeug==2.0.2
+werkzeug==2.1.2
     # via tensorboard
-wheel==0.37.0
+wheel==0.37.1
     # via
     #   astunparse
     #   tensorboard
-wrapt==1.12.1
+wrapt==1.14.1
     # via tensorflow
-zetastitcher==0.6.0
+zetastitcher==0.7.0.post1
     # via -r requirements.in
-zipp==3.6.0
+zipp==3.8.0
     # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
