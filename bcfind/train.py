@@ -1,5 +1,4 @@
 import os
-from typing import Iterator
 import lmdb
 import json
 import pickle
@@ -10,6 +9,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
+from numba import cuda
 from pathlib import Path
 
 from bcfind.config_manager import Configuration
@@ -33,6 +33,10 @@ def parse_args():
 
 
 def main():
+    gpus = tf.config.list_physical_devices('GPU')
+    tf.config.set_visible_devices(gpus[-1], 'GPU')
+    tf.config.experimental.set_memory_growth(gpus[-1], True)
+
     args = parse_args()
     conf = Configuration(args.config)
 
@@ -51,7 +55,7 @@ def main():
         os.makedirs(conf.dog.checkpoint_dir)
     
     if os.path.isdir(conf.unet.tensorboard_dir):
-        shutil.rmtree(conf.unet.tensorboard_dir)
+        shutil.rmtree(conf.unet.tensorboard_dir, ignore_errors=True)
         os.makedirs(conf.unet.tensorboard_dir)
 
     ####################################
@@ -139,16 +143,16 @@ def main():
     print("\n LOADING DoG DATA")
 
     Y = []
-    for marker_file in marker_list:
+    for marker_file in sorted(marker_list):
         print(f"Loading file {marker_file}")
         y = pd.read_csv(open(marker_file, "r"))
         y = y[conf.data.marker_columns].dropna(0)
         Y.append(np.array(y))
 
-    print(f"Saving U-Net predictions in {conf.exp.basepath}/Train_pred.h5")
+    print(f"Saving U-Net predictions in {conf.exp.basepath}/Train_pred_lmdb")
 
     n = len(marker_list)
-    nbytes = np.prod(conf.data.shape) * 4
+    nbytes = np.prod(conf.data.shape) * 1 # 4bytes for float32: 1byte for uint8
     db = lmdb.open(f'{conf.exp.basepath}/Train_pred_lmdb', map_size=n*nbytes*10)
 
     with db.begin(write=True) as fx:
@@ -160,35 +164,41 @@ def main():
             x = x[tf.newaxis, ..., tf.newaxis]
 
             max_attempts = 10
-            attempts = 0
+            attempt = 0
             while True:
                 try:
-                    pred = unet(x, training=False)
+                    print(x.shape)
+                    pred = unet.predict(x)
                     break
-                except tf.errors.InvalidArgumentError as e:
-                    attempts += 1
-                    if attempts % 2 != 0:
-                        print('Invalid input shape for concat layer. Try padding axis 1')
-                        paddings = tf.constant([[0, 0], [0, 1], [0, 0], [0, 0], [0, 0]])
-                    else:
-                        print('Invalid input shape for concat layer. Try padding axes [2, 3]')
-                        paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 1], [0, 0]])
-                    
-                    x = tf.pad(x, paddings)
-                    if attempts == max_attempts:
+                except (tf.errors.InvalidArgumentError, ValueError) as e:
+                    if attempt == max_attempts:
                         raise e
+                    else:
+                        if attempt % 2 == 0:
+                            print('Invalid input shape for concat layer. Try padding axis 1')
+                            paddings = tf.constant([[0, 0], [0, 1], [0, 0], [0, 0], [0, 0]])
+                        else:
+                            print('Invalid input shape for concat layer. Try padding axes [2, 3]')
+                            paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 1], [0, 0]])
+                        
+                        x = tf.pad(x, paddings)
+                        attempt += 1
 
             pred = sigmoid(tf.squeeze(pred)) * 255
-            
-            fx.put(key=f'{i:03}'.encode(), value=pickle.dumps(pred))
+
+            pred = pred.astype('uint8')
+            fname = tiff_file.split('/')[-1]
+            fx.put(key=fname.encode(), value=pickle.dumps(pred))
 
     ####################################
     ############### DOG ################
     ####################################
+    del unet
+    cuda.close()
+
     dog = BlobDoG(3, conf.data.dim_resolution, conf.dog.exclude_border)
     with db.begin() as fx:
         X = fx.cursor()
-
         dog.fit(
             X=X,
             Y=Y,
@@ -207,8 +217,4 @@ def main():
     db.close()
 
 if __name__ == '__main__':
-    gpus = tf.config.list_physical_devices('GPU')
-    tf.config.set_visible_devices(gpus[1], 'GPU')
-    tf.config.experimental.set_memory_growth(gpus[1], True)
-
     main()

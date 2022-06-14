@@ -351,7 +351,9 @@ class BlobDoG:
         """
         if type(x) == bytes:
             x = pickle.loads(x)
-    
+        
+        x = x.astype('float32')
+
         if parameters is None:
             min_sigma = (self.min_rad / self.dim_resolution) / np.sqrt(self.D)
             max_sigma = (self.max_rad / self.dim_resolution) / np.sqrt(self.D)
@@ -368,14 +370,15 @@ class BlobDoG:
             min_sigma = (parameters["min_rad"] / self.dim_resolution) / np.sqrt(self.D)
             max_sigma = (parameters["max_rad"] / self.dim_resolution) / np.sqrt(self.D)
 
-            centers = blob_dog(
-                x,
-                min_sigma=min_sigma,
-                max_sigma=max_sigma,
-                sigma_ratio=parameters["sigma_ratio"],
-                overlap=parameters["overlap"],
-                threshold_rel=parameters["threshold"],
-            )
+            with cp.cuda.Device(cp.cuda.runtime.getDeviceCount() - 1):
+                centers = blob_dog(
+                    x,
+                    min_sigma=min_sigma,
+                    max_sigma=max_sigma,
+                    sigma_ratio=parameters["sigma_ratio"],
+                    overlap=parameters["overlap"],
+                    threshold_rel=parameters["threshold"],
+                )
 
         if self.exclude_border is not None:
             centers = remove_border_points_from_array(
@@ -459,13 +462,13 @@ class BlobDoG:
         """
         if type(x) == bytes:
             x = pickle.loads(x)
-
+        
+        x = x.astype('float32')
+        
         if self.exclude_border is not None:
             y = remove_border_points_from_array(
                 y, x.shape, self.exclude_border
             )
-        
-        x = x.astype('float32')
 
         centers = self.predict(x, parameters)
         
