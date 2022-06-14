@@ -10,6 +10,6 @@ clean:
 docker: docker-image
 
 .PHONY: docker-image
-docker-image:
+docker-image: wheel
 	docker build -t bcfind:latest .
 	docker image tag bcfind:latest bcfind:`date -u +"%Y-%m-%d"`
