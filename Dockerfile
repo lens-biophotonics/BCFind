@@ -23,7 +23,7 @@ WORKDIR /home/
 COPY --from=builder /usr/local/lib/python3.8/ /usr/local/lib/python3.8/
 
 
-# COPY *.whl /home/
-# RUN set -ex \
-# 	\
-#     && pip install *.whl && rm *.whl
+COPY dist/*.whl /home/
+RUN set -ex \
+	\
+    && pip install *.whl && rm *.whl
