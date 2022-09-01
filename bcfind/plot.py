@@ -46,53 +46,60 @@ def make_video(volume, out_filename):
     anim.save(out_filename, fps=fps, extra_args=["-vcodec", "libx264"])
 
 
-def sliding_volume_with_cells(
-    volume, cell_coord, cell_colors=None, slice_width=10, fps=6, **kwargs
+def make_video_with_predictions(
+    volume, bcfind_pred, slide_axis=0, slice_width=10, fps=6, **kwargs
 ):
-    volume = (volume * 255).astype("uint8")
+    volume = volume - volume.min()
+    volume = (volume / volume.max()) * 255
+    plt_axes = [ax for ax in range(len(volume.shape)) if ax != slide_axis]
 
-    if cell_colors is not None:
-        cell_colors = np.array(cell_colors)
-    else:
-        cell_colors = np.repeat("red", cell_coord.shape[0])
-
-    def get_slice_cells_idx(points, z, slice_width):
-        pts_idx = (points["z"] >= z - slice_width // 2) & (
-            points["z"] < z + slice_width // 2
+    def get_slice_cells_idx(points, sl):
+        pts_idx = (points[:, slide_axis] >= sl - slice_width // 2) & (
+            points[:, slide_axis] < sl + slice_width // 2
         )
         return pts_idx
 
-    pts_idx = get_slice_cells_idx(cell_coord, 0, slice_width)
-    slice_pts = cell_coord.loc[pts_idx]
+    # slice_pts = bcfind_pred.loc[pts_idx, :]
+    colors = np.array(bcfind_pred.loc[:, ['R', 'G', 'B']]) / 255
+    bcfind_pred = np.array(bcfind_pred)
+    pts_idx = get_slice_cells_idx(bcfind_pred, 0)
 
     fig, ax = plt.subplots(**kwargs)
     img = ax.imshow(
-        volume[..., 0],
+        volume.take(0, axis=slide_axis),
         interpolation="none",
         aspect="auto",
         cmap="inferno",
         vmin=0,
         vmax=255,
     )
-    sc = ax.scatter(slice_pts["y"], slice_pts["x"], c=cell_colors[pts_idx], s=15)
+    sc = ax.scatter(
+        bcfind_pred[pts_idx, plt_axes[1]], 
+        bcfind_pred[pts_idx, plt_axes[0]], 
+        edgecolors=colors[pts_idx, :], 
+        s=150, 
+        c='none'
+        )
+    
+    plt.axis('off')
     plt.close()
 
     def init():
-        pts_idx = get_slice_cells_idx(cell_coord, 0, slice_width)
-        slice_pts = cell_coord.loc[pts_idx]
+        pts_idx = get_slice_cells_idx(bcfind_pred, 0)
+        slice_pts = bcfind_pred[pts_idx, :]
 
-        img.set_data(volume[..., 0])
-        sc.set_offsets(np.c_[slice_pts["y"], slice_pts["x"]])
-        sc.set_color(c=cell_colors[pts_idx])
+        img.set_data(volume.take(0, axis=slide_axis))
+        sc.set_offsets(np.c_[slice_pts[:, plt_axes[1]], slice_pts[:, plt_axes[0]]])
+        sc.set_edgecolors(c=colors[pts_idx, :])
         return img, sc
 
-    def animate_func(z):
-        pts_idx = get_slice_cells_idx(cell_coord, z, slice_width)
-        slice_pts = cell_coord.loc[pts_idx]
+    def animate_func(sl):
+        pts_idx = get_slice_cells_idx(bcfind_pred, sl)
+        slice_pts = bcfind_pred[pts_idx, :]
 
-        img.set_data(volume[..., z])
-        sc.set_offsets(np.c_[slice_pts["y"], slice_pts["x"]])
-        sc.set_color(c=cell_colors[pts_idx])
+        img.set_data(volume.take(sl, axis=slide_axis))
+        sc.set_offsets(np.c_[slice_pts[:, plt_axes[1]], slice_pts[:, plt_axes[0]]])
+        sc.set_edgecolors(c=colors[pts_idx, :])
 
         return img, sc
 
@@ -100,10 +107,10 @@ def sliding_volume_with_cells(
         fig,
         animate_func,
         init_func=init,
-        frames=volume.shape[2],
+        frames=volume.shape[slide_axis],
         interval=1000 / fps,
         blit=True,
     )
 
-    rc("animation", html="html5")
+    # rc("animation", html="html5")
     return anim
