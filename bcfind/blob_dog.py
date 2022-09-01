@@ -14,7 +14,7 @@ import cucim.skimage.feature as cm_skim_feat
 from scipy import spatial
 
 from bcfind.bipartite_match import bipartite_match
-from bcfind.utils import metrics, remove_border_points_from_array
+from bcfind.utils import metrics, remove_border_points_from_array, remove_border_points_from_df
 
 
 mempool = cp.get_default_memory_pool()
@@ -333,7 +333,7 @@ class BlobDoG:
         self.overlap = parameters["overlap"]
         self.threshold = parameters["threshold"]
 
-    def predict(self, x, parameters=None):
+    def predict(self, x, parameters=None, exclude_border='default'):
         """Predicts blob locations from 2 or 3 dimensional image. Blobs are considered white on black.
         If exclude_border has been specified, detected blobs inside the borders of x will be deleted.
 
@@ -380,9 +380,13 @@ class BlobDoG:
                     threshold_rel=parameters["threshold"],
                 )
 
-        if self.exclude_border is not None:
+        if exclude_border == 'default':
             centers = remove_border_points_from_array(
                 centers, x.shape, self.exclude_border
+            )
+        elif isinstance(exclude_border, (list, int, float)):
+            centers = remove_border_points_from_array(
+                centers, x.shape, exclude_border
             )
         return centers
 
@@ -465,17 +469,26 @@ class BlobDoG:
         
         x = x.astype('float32')
         
-        if self.exclude_border is not None:
-            y = remove_border_points_from_array(
-                y, x.shape, self.exclude_border
-            )
-
-        centers = self.predict(x, parameters)
+        y_pred = self.predict(x, parameters, exclude_border=None)
         
-        evaluation = self.evaluate(
-            centers, y, max_match_dist=max_match_dist, evaluation_type=evaluation_type
-        )
-        return evaluation
+        labeled_centers = self.evaluate(y_pred, y, max_match_dist=max_match_dist)
+
+        if self.exclude_border is not None:
+            labeled_centers = remove_border_points_from_df(labeled_centers, ['x', 'y', 'z'], x.shape, self.exclude_border)
+        
+        if evaluation_type == 'complete':
+            return labeled_centers
+        else:
+            TP = np.sum(labeled_centers.name == "TP")
+            FP = np.sum(labeled_centers.name == "FP")
+            FN = np.sum(labeled_centers.name == "FN")
+
+            eval_counts = pd.DataFrame([TP, FP, FN, y_pred.shape[0], y.shape[0]]).T
+            eval_counts.columns = ["TP", "FP", "FN", "tot_pred", "tot_true"]
+            if evaluation_type == "counts":
+                return eval_counts
+            else:
+                return metrics(eval_counts)[evaluation_type]
 
     def _objective(
         self, 
