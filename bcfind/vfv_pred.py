@@ -6,6 +6,7 @@ import threading
 import numpy as np
 import pandas as pd
 import functools as ft
+import tensorflow as tf
 
 from pathlib import Path
 
@@ -13,11 +14,10 @@ from skimage import io
 from queue import Queue
 from zetastitcher import VirtualFusedVolume
 
-from bcfind.blob_dog import BlobDoG
-from bcfind.train import build_unet
+from bcfind.localizers import BlobDoG
 from bcfind.config_manager import Configuration
 from bcfind.utils import sigmoid, preprocessing
-
+from bcfind.losses import FramedCrossentropy3D, FramedFocalCrossentropy3D
 
 def substack_name(x0, y0, z0, sub_shape, overlap):
     return f"sub_{x0}_{y0}_{z0}____{sub_shape[0]}_{sub_shape[1]}_{sub_shape[2]}____{overlap[0]}_{overlap[1]}_{overlap[2]}"
@@ -222,15 +222,11 @@ def main():
 
     # Preparing U-Net
     print("Loading UNet and DoG parameters...")
-    unet = build_unet(
-        n_filters=conf.unet.n_filters,
-        k_size=conf.unet.k_size,
-        k_stride=conf.unet.k_stride,
-        input_shape=conf.vfv.sub_shape,
-        learning_rate=conf.unet.learning_rate,
-        exclude_border=conf.unet.exclude_border,
-    )
-    unet.load_weights(Path(conf.unet.checkpoint_dir) / 'model.h5')
+    custom_objects = {
+        'FramedFocalCrossentropy3D': FramedFocalCrossentropy3D,
+        'FramedCrossentropy3D': FramedCrossentropy3D
+    }
+    unet = tf.keras.models.load_model(f"{conf.unet.checkpoint_dir}/model.tf", custom_objects=custom_objects)
 
     # Preparing DoG
     dog = BlobDoG(len(conf.vfv.sub_shape), conf.data.dim_resolution)

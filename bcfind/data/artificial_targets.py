@@ -12,7 +12,7 @@ from bcfind.utils import iround
 def vaa3d_to_numpy(marker_path):
     df = pd.read_csv(open(str(marker_path), "r"))
     df = df.iloc[:, :3]
-    df = df.dropna(0)
+    df = df.dropna(axis=0)
     return df.to_numpy()
 
 

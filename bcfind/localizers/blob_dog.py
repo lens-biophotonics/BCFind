@@ -13,7 +13,7 @@ import cucim.skimage.feature as cm_skim_feat
 
 from scipy import spatial
 
-from bcfind.bipartite_match import bipartite_match
+from bcfind.localizers.bipartite_match import bipartite_match
 from bcfind.utils import metrics, remove_border_points_from_array, remove_border_points_from_df
 
 
@@ -306,7 +306,7 @@ class BlobDoG:
 
         self.D = n_dim
         self.dim_resolution = np.array(dim_resolution)
-        self.exclude_border = exclude_border
+        self.exclude_border = np.array(exclude_border)
         self.train_step = 0
 
         # Default parameter settings
@@ -470,6 +470,9 @@ class BlobDoG:
         x = x.astype('float32')
         
         y_pred = self.predict(x, parameters, exclude_border=None)
+        # if self.exclude_border is not None:
+        #     y_pred = remove_border_points_from_array(y_pred, x.shape, self.exclude_border / 2)
+        #     y = remove_border_points_from_array(y, x.shape, self.exclude_border / 2)
         
         labeled_centers = self.evaluate(y_pred, y, max_match_dist=max_match_dist)
 
@@ -483,7 +486,7 @@ class BlobDoG:
             FP = np.sum(labeled_centers.name == "FP")
             FN = np.sum(labeled_centers.name == "FN")
 
-            eval_counts = pd.DataFrame([TP, FP, FN, y_pred.shape[0], y.shape[0]]).T
+            eval_counts = pd.DataFrame([TP, FP, FN, TP + FP, TP + FN]).T
             eval_counts.columns = ["TP", "FP", "FN", "tot_pred", "tot_true"]
             if evaluation_type == "counts":
                 return eval_counts
@@ -584,7 +587,7 @@ class BlobDoG:
             "min_max_rad_diff": ho.hp.uniform("min_max_rad_diff", 1.0, 10.0),
             "sigma_ratio": ho.hp.uniform("sigma_ratio", 1.0, 2.0),
             "overlap": ho.hp.uniform("overlap", 0.0, 1.0),
-            "threshold": ho.hp.uniform("threshold", 0.0, 1.0),
+            "threshold": ho.hp.uniform("threshold", 0.0, 0.4),
         }
 
         best_par = ho.fmin(

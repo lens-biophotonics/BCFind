@@ -13,11 +13,11 @@ from numba import cuda
 from pathlib import Path
 
 from bcfind.config_manager import Configuration
-from bcfind.models import UNet, SEUNet, ECAUNet
+from bcfind.models import UNet, SEUNet, ECAUNet, MoUNets
 from bcfind.utils import sigmoid
-from bcfind.blob_dog import BlobDoG
+from bcfind.localizers.blob_dog import BlobDoG
 from bcfind.losses import FramedCrossentropy3D, FramedFocalCrossentropy3D
-from bcfind.training_dataset import TrainingDataset, get_input_tf, normalize_tf
+from bcfind.data import TrainingDataset, get_input_tf, normalize_tf
 
 
 def parse_args():
@@ -91,13 +91,16 @@ def main():
     optimizer = tf.keras.optimizers.Adam(conf.unet.learning_rate)
 
     unet = UNet(
-        input_shape=[None, None, None, 1], 
+        n_blocks=conf.unet.n_blocks, 
         n_filters=conf.unet.n_filters, 
         k_size=conf.unet.k_size, 
-        k_stride=conf.unet.k_stride, 
+        k_stride=conf.unet.k_stride,
+        # n_experts=5,
+        # top_k_experts=2,
         dropout=conf.unet.dropout, 
         regularizer=conf.unet.regularizer
         )
+    unet.build((None, None, None, None, 1))
     unet.compile(loss=loss, optimizer=optimizer)
     unet.summary()
 
@@ -131,12 +134,9 @@ def main():
     del unet
 
     # Load UNet and weights
-    custom_objects = {
-        'FramedFocalCrossentropy3D': FramedFocalCrossentropy3D,
-        'FramedCrossentropy3D': FramedCrossentropy3D
-    }
-    unet = tf.keras.models.load_model(f"{conf.unet.checkpoint_dir}/model.tf", custom_objects=custom_objects)
-
+    unet = tf.keras.models.load_model(f"{conf.unet.checkpoint_dir}/model.tf")
+    unet.build((None, None, None, None, 1))
+    
     ####################################
     ############ DOG DATA ##############
     ####################################

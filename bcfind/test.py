@@ -11,9 +11,9 @@ import concurrent.futures as cf
 from pathlib import Path
 
 from bcfind.config_manager import Configuration
-from bcfind.blob_dog import BlobDoG
+from bcfind.localizers import BlobDoG
 from bcfind.utils import sigmoid, metrics
-from bcfind.training_dataset import get_input_tf, normalize_tf
+from bcfind.data import get_input_tf, normalize_tf
 from bcfind.losses import FramedCrossentropy3D, FramedFocalCrossentropy3D
 
 

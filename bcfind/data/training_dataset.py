@@ -1,19 +1,20 @@
 import logging
+from cv2 import reduce
 import numpy as np
 import tensorflow as tf
 
 from pathlib import Path
 
 from zetastitcher import InputFile
-from bcfind.artificial_targets import get_target
-from bcfind.augmentation import *
+from bcfind.data import get_target
+from bcfind.data.augmentation import *
 
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
-@tf.function
+@tf.function(reduce_retracing=True)
 def get_target_tf(marker_file, target_shape, dim_resolution):
     def get_target_wrap(marker_file, target_shape, dim_resolution):
         marker_file = Path(marker_file.decode())
@@ -28,7 +29,7 @@ def get_target_tf(marker_file, target_shape, dim_resolution):
     target = tf.numpy_function(get_target_wrap, [marker_file, target_shape, dim_resolution], tf.float32)
     return target
 
-@tf.function
+@tf.function(reduce_retracing=True)
 def get_input_tf(input_file):
     def get_input_wrap(input_file):
         input_file = Path(input_file.decode())
@@ -79,6 +80,10 @@ class TrainingDataset(tf.data.Dataset):
 
         logger.info(f'creating blobs from {marker_path}')
         blobs = get_target_tf(marker_path, shape, dim_resolution)
+        
+        # attempt to smart blob weighting
+        blobs = blobs * input_image
+        blobs = blobs / tf.reduce_max(blobs)
 
         xy = tf.concat([tf.expand_dims(input_image, 0), tf.expand_dims(blobs, 0)], axis=0)
         return tf.ensure_shape(xy, (2, None, None, None))
@@ -92,7 +97,7 @@ class TrainingDataset(tf.data.Dataset):
         
         # load images and targets from paths
         data = data.map(lambda x, y: cls.parse_imgs(x, y, dim_resolution), num_parallel_calls=tf.data.AUTOTUNE, deterministic=False)
-
+        
         # cache data after time consuming map and make it shuffle every epoch
         data = data.cache().shuffle(len(marker_list), reshuffle_each_iteration=True)
 
