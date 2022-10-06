@@ -54,6 +54,7 @@ UNet:
     epochs         : 3000
     batch_size     : 10
     learning_rate  : 0.001
+    n_blocks       : 4
     n_filters      : 32
     k_size         : [5, 5, 3]
     k_stride       : [2, 2, 2]
