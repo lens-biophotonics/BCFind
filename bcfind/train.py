@@ -13,7 +13,7 @@ from numba import cuda
 from pathlib import Path
 
 from bcfind.config_manager import Configuration
-from bcfind.models import UNet, SEUNet, ECAUNet, MoUNets
+from bcfind.models import UNet, SEUNet, ECAUNet, AttentionUNet, MoUNets
 from bcfind.utils import sigmoid
 from bcfind.localizers.blob_dog import BlobDoG
 from bcfind.losses import FramedCrossentropy3D, FramedFocalCrossentropy3D
@@ -78,28 +78,74 @@ def main():
         dim_resolution=conf.data.dim_resolution, 
         output_shape=conf.unet.input_shape, 
         augmentations=conf.data_aug.op_args, 
-        augmentations_prob=conf.data_aug.op_probs)
+        augmentations_prob=conf.data_aug.op_probs,
+        )
 
     ####################################
     ############## UNET ################
     ####################################
     print()
     print('\n BUILDING UNET')
+    if conf.unet.model == 'unet':
+        unet = UNet(
+            n_blocks=conf.unet.n_blocks, 
+            n_filters=conf.unet.n_filters, 
+            k_size=conf.unet.k_size, 
+            k_stride=conf.unet.k_stride,
+            dropout=conf.unet.dropout, 
+            regularizer=conf.unet.regularizer
+            )
+    elif conf.unet.model == 'se-unet':
+        unet = SEUNet(
+            n_blocks=conf.unet.n_blocks, 
+            n_filters=conf.unet.n_filters, 
+            k_size=conf.unet.k_size, 
+            k_stride=conf.unet.k_stride,
+            squeeze_factor=conf.unet.squeeze_factor,
+            dropout=conf.unet.dropout, 
+            regularizer=conf.unet.regularizer
+            )
+    elif conf.unet.model == 'eca-unet':
+        unet = ECAUNet(
+            n_blocks=conf.unet.n_blocks, 
+            n_filters=conf.unet.n_filters, 
+            k_size=conf.unet.k_size, 
+            k_stride=conf.unet.k_stride,
+            dropout=conf.unet.dropout, 
+            regularizer=conf.unet.regularizer
+            )
+    elif conf.unet.model == 'attention-unet':
+        unet = AttentionUNet(
+            n_blocks=conf.unet.n_blocks, 
+            n_filters=conf.unet.n_filters, 
+            k_size=conf.unet.k_size, 
+            k_stride=conf.unet.k_stride,
+            dropout=conf.unet.dropout, 
+            regularizer=conf.unet.regularizer
+            )
+    elif conf.unet.model == 'moe-unet':
+        unet = MoUNets(
+            n_blocks=conf.unet.n_blocks, 
+            n_filters=conf.unet.n_filters, 
+            k_size=conf.unet.k_size, 
+            k_stride=conf.unet.k_stride,
+            n_experts=conf.unet.n_experts,
+            keep_top_k=conf.unet.top_k_experts,
+            add_noise=conf.unet.moe_noise,
+            dropout=conf.unet.dropout, 
+            regularizer=conf.unet.regularizer
+            )
+    else:
+        raise ValueError(f'UNet model must be one of ["unet", "se-unet", "eca-unet", "attention-unet", "moe-unet"]. \
+            Received {conf.unet.model}.')
+    
+    
     # loss = FramedFocalCrossentropy3D(exclude_border, input_shape, gamma=3, alpha=None, from_logits=True)
     loss = FramedCrossentropy3D(conf.unet.exclude_border, conf.unet.input_shape, from_logits=True)
     # loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-    optimizer = tf.keras.optimizers.Adam(conf.unet.learning_rate)
+    lr_schedule = tf.keras.optimizers.schedules.CosineDecay(conf.unet.learning_rate, data.cardinality().numpy(), alpha=0.0)
+    optimizer = tf.keras.optimizers.Adam(lr_schedule)
 
-    unet = UNet(
-        n_blocks=conf.unet.n_blocks, 
-        n_filters=conf.unet.n_filters, 
-        k_size=conf.unet.k_size, 
-        k_stride=conf.unet.k_stride,
-        # n_experts=5,
-        # top_k_experts=2,
-        dropout=conf.unet.dropout, 
-        regularizer=conf.unet.regularizer
-        )
     unet.build((None, None, None, None, 1))
     unet.compile(loss=loss, optimizer=optimizer)
     unet.summary()
@@ -152,7 +198,7 @@ def main():
     print(f"Saving U-Net predictions in {conf.exp.basepath}/Train_pred_lmdb")
 
     n = len(marker_list)
-    nbytes = np.prod(conf.data.shape) * 1 # 4bytes for float32: 1byte for uint8
+    nbytes = np.prod(conf.data.shape) * 1 # 4 bytes for float32: 1 byte for uint8
     db = lmdb.open(f'{conf.exp.basepath}/Train_pred_lmdb', map_size=n*nbytes*10)
 
     with db.begin(write=True) as fx:
@@ -168,7 +214,7 @@ def main():
             while True:
                 try:
                     print(x.shape)
-                    pred = unet.predict(x)
+                    pred = unet(x, training=False)
                     break
                 except (tf.errors.InvalidArgumentError, ValueError) as e:
                     if attempt == max_attempts:
