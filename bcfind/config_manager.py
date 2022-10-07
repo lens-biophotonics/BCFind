@@ -1,5 +1,6 @@
 import yaml
 import numpy as np
+import tensorflow as tf
 
 # Class to acces dictionary keys as if they were attributes
 class AttrDict(dict):
@@ -16,7 +17,6 @@ class Configuration:
         yaml_key_to_attr = {
             'Dataset': 'data',
             'Experiment': 'exp',
-            'PreProcessing': 'preproc',
             'DataAugmentation': 'data_aug',
             'UNet': 'unet',
             'DoG': 'dog',
@@ -48,13 +48,6 @@ class Configuration:
         # Experiment
         self.exp.basepath = f"{self.exp.basepath}/{self.exp.name}"
 
-        # PreProcessing
-        if self.preproc.normalization is None:
-            self.preproc.normalization = "none"
-
-        if self.preproc.standardization is None:
-            self.preproc.standardization = "none"
-
         # DataAugmentation
         if self.data_aug.augment:
             self.data_aug.op_args = {}
@@ -70,6 +63,24 @@ class Configuration:
             self.data_aug.op_probs = None
 
         # UNet
+        if isinstance(self.unet.regularizer, dict):
+            if len(self.unet.regularizer) > 1:
+                raise ValueError(f'''
+                Dictionary specification for UNet regularizer must have max length = 1. 
+                Got {self.unet.regularizer} of length {len(self.unet.regularizer)}
+                ''')
+
+            key, value = list(self.unet.regularizer.items())[0]
+            if key == 'l1':
+                self.unet.regularizer = tf.keras.regularizers.L1(value)
+            elif key == 'l2':
+                self.unet.regularizer = tf.keras.regularizers.L2(value)
+            else:
+                raise ValueError(f'''
+                Dictionary keys for UNet regularizer must be one of ['l1', 'l2'].
+                Got instead {key}
+                ''')
+            
         self.unet.checkpoint_dir = f"{self.exp.basepath}/UNet_checkpoint"
         self.unet.tensorboard_dir = f"{self.exp.basepath}/UNet_tensorboard"
 

@@ -9,17 +9,8 @@ Experiment:
     name           : 'my_exp'
     basepath       : '/path/to/my/experiment/outputs'
 
-PreProcessing:
-    transpose         : [2, 1, 0]
-    flip_axis         : 1
-    clip_threshold    : 8192
-    gamma_correction  : 1.2
-    downscale         : null
-    normalization     : 'input'
-    standardization   : null
-
 DataAugmentation:
-    augment: true
+    augment: false
     gamma: 
         param_range     : [0.8, 1.2]
         p               : 0.3
@@ -47,31 +38,34 @@ DataAugmentation:
         p               : 0.3
 
 UNet:
-    val_fold       : '1/4'
-    val_seed       : 123
-    input_shape    : [240, 240, 80]
-    exclude_border : [10, 10, 3]
+    model          : 'unet'
+    input_shape    : [80, 240, 240]
+    exclude_border : [3, 9, 9]
     epochs         : 3000
     batch_size     : 10
-    learning_rate  : 0.001
+    learning_rate  : 0.01
     n_blocks       : 4
     n_filters      : 32
-    k_size         : [5, 5, 3]
+    k_size         : [3, 5, 5]
     k_stride       : [2, 2, 2]
     dropout        : null
-    regularizer    : tf.keras.regularizers.L1(0.003)
+    regularizer    : {'l1': 0.003}
+    squeeze_factor : 2
+    n_experts      : 5
+    top_k_experts  : null
+    moe_noise      : true
 
 DoG:
     iterations     : 40
-    exclude_border : [10, 10, 3]
+    exclude_border : [3, 9, 9]
     max_match_dist : 10
     n_cpu          : 1
 
 VirtualFusedVolume:
-    name           : 'vfv_name'
-    config_file    : '/path/to/vfv/stitch.yml'
-    sub_shape      : [160, 480, 480]
-    sub_overlap    : [8, 20, 20]
-    mask_path      : '/path/to/mask.tiff'
-    mask_downscale : [3, 3, 3]
-    outdir         : '/path/to/vfv/predictions/folder'
+    name             : 'vfv_name'
+    config_file      : '/path/to/vfv/stitch.yml'
+    patch_shape      : [160, 480, 480]
+    patch_overlap    : [8, 20, 20]
+    mask_path        : '/path/to/mask.tiff'
+    mask_downscale   : [3, 3, 3]
+    outdir           : '/path/to/vfv/predictions/folder'
