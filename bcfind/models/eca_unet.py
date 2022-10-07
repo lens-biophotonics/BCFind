@@ -6,7 +6,29 @@ from bcfind.layers.efficient_channel_attention import EfficientChannelAttention,
 
 
 class ECAUNet(tf.keras.Model):
+    """Class for UNet model with Efficient Channel Attention module after each convolutional layer.
+
+    Refers to:\n
+        - 'Q. Wang et al. "ECA-Net: Efficient Channel Attention for Deep Convolutional Neural Networks" <https://arxiv.org/pdf/1910.03151.pdf>'
+    """    
     def __init__(self, n_blocks, n_filters, k_size, k_stride, dropout=None, regularizer=None, **kwargs):
+        """Constructor method.
+
+        Parameters
+        ----------
+        n_blocks : int
+            depth of the UNet encoder
+        n_filters : int
+            number of filters for the first layer. Consecutive layers increase esponentially their number of filters.
+        k_size : int or tuple of ints
+            size of the kernel for convolutional layers
+        k_stride : int or tuple of ints
+            stride for the convolutional layers. The last two encoding and the first two decoding layers will however have no stride.
+        dropout : bool, optional
+            whether or not to add dropout layer after each convolutional block, by default None.
+        regularizer : string or tf.keras.regularizers, optional
+            a regularization method for keras layers, by default None.
+        """
         super(ECAUNet, self).__init__(**kwargs)
         self.n_blocks = n_blocks
         self.n_filters = n_filters 

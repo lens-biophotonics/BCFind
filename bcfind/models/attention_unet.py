@@ -5,7 +5,31 @@ from bcfind.layers.decoder_block import DecoderBlock
 
 
 class AttentionUNet(tf.keras.Model):
+    """Class for Attention UNet model with channel attention gate added to the skip connections.
+
+    Refers to:\n
+        - 'O. Oktay et al. "Attention UNet" <https://arxiv.org/pdf/1804.03999.pdf>' for the main architecture \n
+        - 'J. Fu et al. "Dual Attention Network for Scene Segmentation" <https://openaccess.thecvf.com/content_CVPR_2019/papers/Fu_Dual_Attention_Network_for_Scene_Segmentation_CVPR_2019_paper.pdf>'
+        for the channel attention module
+    """    
     def __init__(self, n_blocks, n_filters, k_size, k_stride, dropout=None, regularizer=None, **kwargs):
+        """Constructor method.
+
+        Parameters
+        ----------
+        n_blocks : int
+            depth of the UNet encoder
+        n_filters : int
+            number of filters for the first layer. Consecutive layers increase their number of filters esponentially.
+        k_size : int or tuple of ints
+            size of the kernel for convolutional layers
+        k_stride : int or tuple of ints
+            stride for the convolutional layers. The last two encoding and the first two decoding layers will however have no stride.
+        dropout : bool, optional
+            whether or not to add dropout layer after each convolutional block, by default None.
+        regularizer : string or tf.keras.regularizers, optional
+            a regularization method for keras layers, by default None.
+        """        
         super(AttentionUNet, self).__init__(**kwargs)
         self.n_blocks = n_blocks
         self.n_filters = n_filters 
@@ -93,7 +117,7 @@ class AttentionUNet(tf.keras.Model):
             activation='linear'
             )
 
-    def call(self, inputs, training=None):
+    def call(self, inputs, training=None):        
         encodings = []
         for i_e, encoder_block in enumerate(self.encoder_blocks):
             if i_e == 0:

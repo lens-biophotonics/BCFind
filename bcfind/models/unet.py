@@ -5,7 +5,30 @@ from bcfind.layers.decoder_block import DecoderBlock
 
 
 class UNet(tf.keras.Model):
+    """Class for 3D UNet model.
+
+
+    Refers to:
+        - O. Ronneberger et al. 'UNet: Convolutional Networks for Biomedical Image Segmenation <https://arxiv.org/pdf/1505.04597.pdf>'
+    """    
     def __init__(self, n_blocks, n_filters, k_size, k_stride, dropout=None, regularizer=None, **kwargs):
+        """Constructor method.
+
+        Parameters
+        ----------
+        n_blocks : int
+            depth of the UNet encoder
+        n_filters : int
+            number of filters for the first layer. Consecutive layers increase esponentially their number of filters.
+        k_size : int or tuple of ints
+            size of the kernel for convolutional layers
+        k_stride : int or tuple of ints
+            stride for the convolutional layers. The last two encoding and the first two decoding layers will however have no stride.
+        dropout : bool, optional
+            whether or not to add dropout layer after each convolutional block, by default None.
+        regularizer : string or tf.keras.regularizers, optional
+            a regularization method for keras layers, by default None.
+        """
         super(UNet, self).__init__(**kwargs)
         self.n_blocks = n_blocks
         self.n_filters = n_filters 
