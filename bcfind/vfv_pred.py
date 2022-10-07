@@ -19,15 +19,16 @@ from bcfind.config_manager import Configuration
 from bcfind.utils import sigmoid, preprocessing
 from bcfind.losses import FramedCrossentropy3D, FramedFocalCrossentropy3D
 
-def substack_name(x0, y0, z0, sub_shape, overlap):
-    return f"sub_{x0}_{y0}_{z0}____{sub_shape[0]}_{sub_shape[1]}_{sub_shape[2]}____{overlap[0]}_{overlap[1]}_{overlap[2]}"
+
+def substack_name(x0, y0, z0, patch_shape, overlap):
+    return f"sub_{x0}_{y0}_{z0}____{patch_shape[0]}_{patch_shape[1]}_{patch_shape[2]}____{overlap[0]}_{overlap[1]}_{overlap[2]}"
 
 
 def substack_generator(
-    vfv, sub_shape, overlap, preprocessing_fun=None, vfv_mask=None, not_to_do=None
+    vfv, patch_shape, overlap, preprocessing_fun=None, vfv_mask=None, not_to_do=None
 ):
     vfv_shape = np.array(vfv.shape)
-    no_overlap_shape = np.ceil(sub_shape - overlap).astype(int)
+    no_overlap_shape = np.ceil(patch_shape - overlap).astype(int)
     nz, ny, nx = np.ceil(vfv_shape / no_overlap_shape).astype(int)
 
     for z in range(nz):
@@ -36,7 +37,7 @@ def substack_generator(
                 # Vertices of substack volume
                 idx = np.array([z, y, x])
                 z0, y0, x0 = no_overlap_shape * idx - np.array(overlap / 2).astype(int)
-                z1, y1, x1 = np.minimum(vfv_shape, np.array([z0, y0, x0] + sub_shape))
+                z1, y1, x1 = np.minimum(vfv_shape, np.array([z0, y0, x0] + patch_shape))
 
                 if idx[0] == 0:
                     z0 = 0
@@ -46,7 +47,7 @@ def substack_generator(
                     x0 = 0
 
                 # Substack name to save and retrieve position in VFV
-                sub_name = substack_name(z0, y0, x0, sub_shape, overlap)
+                sub_name = substack_name(z0, y0, x0, patch_shape, overlap)
                 if sub_name in not_to_do:
                     continue
 
@@ -125,7 +126,7 @@ def predict_vfv(
     nn_model,
     localizer,
     vfv,
-    sub_shape,
+    patch_shape,
     overlap,
     outdir,
     preprocessing_fun=None,
@@ -189,7 +190,7 @@ def predict_vfv(
     # Start populating substack queue
     not_to_do = [f for f in os.listdir(outdir) if f.endswith(".npy")]
     sub_gen = substack_generator(
-        vfv, sub_shape, overlap, preprocessing_fun, vfv_mask, not_to_do
+        vfv, patch_shape, overlap, preprocessing_fun, vfv_mask, not_to_do
     )
     for substack, name in sub_gen:
         substack_q.put([substack, name])
@@ -222,14 +223,11 @@ def main():
 
     # Preparing U-Net
     print("Loading UNet and DoG parameters...")
-    custom_objects = {
-        'FramedFocalCrossentropy3D': FramedFocalCrossentropy3D,
-        'FramedCrossentropy3D': FramedCrossentropy3D
-    }
-    unet = tf.keras.models.load_model(f"{conf.unet.checkpoint_dir}/model.tf", custom_objects=custom_objects)
+    unet = tf.keras.models.load_model(f"{conf.unet.checkpoint_dir}/model.tf")
+    unet.build((None, None, None, None, 1))
 
     # Preparing DoG
-    dog = BlobDoG(len(conf.vfv.sub_shape), conf.data.dim_resolution)
+    dog = BlobDoG(len(conf.vfv.patch_shape), conf.data.dim_resolution)
     dog_par_file = Path(conf.dog.checkpoint_dir) / "parameters.json"
     if dog_par_file.exists():
         dog_par = json.load(open(dog_par_file))
@@ -246,9 +244,9 @@ def main():
         vfv_mask = None
 
     # Define callable preprocessing function
-    output_shape = conf.vfv.sub_shape
+    output_shape = conf.vfv.patch_shape
     if conf.preproc.transpose is not None:
-        output_shape = [conf.vfv.sub_shape[i] for i in conf.preproc.transpose]
+        output_shape = [conf.vfv.patch_shape[i] for i in conf.preproc.transpose]
 
     preprocessing_fun = ft.partial(
         preprocessing,
@@ -266,8 +264,8 @@ def main():
         unet,
         dog,
         vfv,
-        conf.vfv.sub_shape,
-        conf.vfv.sub_overlap,
+        conf.vfv.patch_shape,
+        conf.vfv.patch_overlap,
         conf.vfv.pred_outdir,
         preprocessing_fun=preprocessing_fun,
         vfv_mask=vfv_mask,

@@ -8,13 +8,10 @@ import pandas as pd
 import tensorflow as tf
 import concurrent.futures as cf
 
-from pathlib import Path
-
 from bcfind.config_manager import Configuration
 from bcfind.localizers import BlobDoG
 from bcfind.utils import sigmoid, metrics
 from bcfind.data import get_input_tf, normalize_tf
-from bcfind.losses import FramedCrossentropy3D, FramedFocalCrossentropy3D
 
 
 def parse_args():
@@ -26,7 +23,12 @@ def parse_args():
         ),
     )
     parser.add_argument("config", type=str, help="path to the YAML configuration file")
-    parser.add_argument('--save-pred', default=False, action='store_true', help="wheter to save the predicted locations in the experiment directory or not")
+    parser.add_argument(
+        '--save-pred', 
+        default=False, 
+        action='store_true', 
+        help="wheter to save the predicted locations in the experiment directory or not"
+        )
     return parser.parse_args()
 
 
@@ -41,11 +43,8 @@ def main():
     ####################################
     ############ LOAD UNET #############
     ####################################
-    custom_objects = {
-        'FramedFocalCrossentropy3D': FramedFocalCrossentropy3D,
-        'FramedCrossentropy3D': FramedCrossentropy3D
-    }
-    unet = tf.keras.models.load_model(f"{conf.unet.checkpoint_dir}/model.tf", custom_objects=custom_objects)
+    unet = tf.keras.models.load_model(f"{conf.unet.checkpoint_dir}/model.tf")
+    unet.build((None, None, None, None, 1))
 
     ###########################################
     ############ UNET PREDICTIONS #############
@@ -68,7 +67,7 @@ def main():
     print(f"\n UNet predictions on test-set")
 
     n = len(marker_list)
-    nbytes = np.prod(conf.data.shape) * 1 # 4bytes for float32: 1byte for uint8
+    nbytes = np.prod(conf.data.shape) * 1 # 4 bytes for float32: 1 byte for uint8
     db = lmdb.open(f'{conf.exp.basepath}/Test_pred_lmdb', map_size=n*nbytes*10)
 
     with db.begin(write=True) as fx:
@@ -83,7 +82,7 @@ def main():
             attempt = 0
             while True:
                 try:
-                    pred = unet.predict(x)
+                    pred = unet(x, training=False)
                     break
                 except (tf.errors.InvalidArgumentError, ValueError) as e:
                     if attempt == max_attempts:
