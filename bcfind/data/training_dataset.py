@@ -81,14 +81,23 @@ class TrainingDataset(tf.data.Dataset):
         logger.info(f'creating blobs from {marker_path}')
         blobs = get_target_tf(marker_path, shape, dim_resolution)
         
-        # attempt to smart blob weighting
-        blobs = blobs * input_image
-        blobs = blobs / tf.reduce_max(blobs)
+        # attempt to smart blob weights
+        # blobs = blobs * input_image
+        # blobs = blobs / tf.reduce_max(blobs)
 
         xy = tf.concat([tf.expand_dims(input_image, 0), tf.expand_dims(blobs, 0)], axis=0)
         return tf.ensure_shape(xy, (2, None, None, None))
 
-    def __new__(cls, tiff_list, marker_list, batch_size, dim_resolution=1.0, output_shape=None, augmentations=None, augmentations_prob=0.5):
+    def __new__(
+        cls, 
+        tiff_list, 
+        marker_list, 
+        batch_size, 
+        dim_resolution=1.0, 
+        output_shape=None, 
+        augmentations=None, 
+        augmentations_prob=0.5
+        ):
         if isinstance(dim_resolution, (float, int)):
             dim_resolution = [dim_resolution] * 3
 
