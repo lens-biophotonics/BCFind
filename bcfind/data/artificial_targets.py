@@ -1,3 +1,4 @@
+import os
 import json
 import numpy as np
 import pandas as pd
@@ -38,10 +39,14 @@ def get_target(
     # Radius to be used when cells are sufficiently far away
     # Radius should be never larger than distance to the nearest neighbor divided by this quantity
     # default_radius *= dim_resolution
+    try:
+        suffix = marker_path.suffix
+    except AttributeError:
+        _, suffix = os.path.splitext(marker_path)
     
-    if marker_path.suffix == '.marker':
+    if suffix == '.marker':
         X = vaa3d_to_numpy(marker_path)
-    elif marker_path.suffix == '.json':
+    elif suffix == '.json':
         X = slicer_to_numpy(marker_path)
     else:
         raise ValueError('marker_path is incompatible with known formats: Vaa3d (.marker) or 3DSlicer (.json).')
