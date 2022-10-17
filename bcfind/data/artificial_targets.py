@@ -11,8 +11,7 @@ from bcfind.utils import iround
 
 
 def vaa3d_to_numpy(marker_path):
-    df = pd.read_csv(open(str(marker_path), "r"))
-    df = df.iloc[:, :3]
+    df = pd.read_csv(open(str(marker_path), "r"))[['#x', ' y', ' z']]
     df = df.dropna(axis=0)
     return df.to_numpy()
 
