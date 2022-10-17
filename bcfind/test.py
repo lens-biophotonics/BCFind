@@ -6,12 +6,12 @@ import argparse
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import concurrent.futures as cf
 
 from bcfind.config_manager import Configuration
+from bcfind.data.artificial_targets import get_gt_as_numpy
 from bcfind.localizers import BlobDoG
-from bcfind.utils import sigmoid, metrics
-from bcfind.data import get_input_tf, normalize_tf
+from bcfind.utils import metrics
+from bcfind.data import get_input_tf
 
 
 def parse_args():
@@ -60,8 +60,7 @@ def main():
     for marker_file in marker_list:
         print(f"Loading file {marker_file}")
 
-        y = pd.read_csv(open(marker_file, "r"))
-        y = y[conf.data.marker_columns].dropna(0)
+        y = get_gt_as_numpy(marker_file)
         Y.append(np.array(y))
 
     print(f"\n UNet predictions on test-set")
@@ -74,8 +73,7 @@ def main():
         for i, tiff_file in enumerate(tiff_list):
             print(f"Unet prediction on file {i+1}/{len(tiff_list)}")
             
-            x = get_input_tf(tf.constant(tiff_file))
-            x = normalize_tf(x)
+            x = get_input_tf(tiff_file)
             x = x[tf.newaxis, ..., tf.newaxis]
 
             max_attempts = 10
@@ -97,7 +95,7 @@ def main():
                         
                         x = tf.pad(x, paddings)                    
             
-            pred = sigmoid(tf.squeeze(pred)) * 255
+            pred = tf.sigmoid(tf.squeeze(pred)).numpy() * 255
 
             pred = pred.astype('uint8')
             fname = tiff_file.split('/')[-1]
@@ -114,25 +112,25 @@ def main():
 
     print(f"Best parameters found for DoG: {dog_par}")
     with db.begin() as fx:
-        X_emb = fx.cursor().iternext(keys=False)
+        res = []
+        for i, file_path in enumerate(tiff_list):
+            fname = file_path.split('/')[-1]
+            x = fx.get(fname.encode())
 
-        with cf.ThreadPoolExecutor(5) as pool:
-            futures = [
-                pool.submit(
-                    dog.predict_and_evaluate,
-                    x, 
-                    y, 
-                    conf.dog.max_match_dist,
-                    'counts'
+            pred = dog.predict_and_evaluate(
+                x,
+                Y[i],
+                conf.dog.max_match_dist,
+                'counts'
                 )
-                for x, y in zip(X_emb, Y)
-            ]
-            res = [future.result() for future in cf.as_completed(futures)]
+
+            pred['f1'] = pred['TP'] / (pred['TP'] + .5 * (pred['FP'] + pred['FN']))
+            pred['file'] = fname
+            res.append(pred)
+    db.close()
 
     res = pd.concat(res)
-    names = [f.split('/')[-1] for f in sorted(tiff_list)]
-    res['file'] = names
-    res.to_csv(f"{conf.exp.basepath}/test_eval.csv")
+    res.to_csv(f"{conf.exp.basepath}/Test_eval.csv")
     perf = metrics(res)
 
     print(f"\n Test-set evaluated with {perf}")
