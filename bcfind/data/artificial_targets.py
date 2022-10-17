@@ -26,6 +26,21 @@ def slicer_to_numpy(marker_path):
     return np.array(X)
 
 
+def get_gt_as_numpy(marker_path):
+    try:
+        suffix = marker_path.suffix
+    except AttributeError:
+        _, suffix = os.path.splitext(marker_path)
+    
+    if suffix == '.marker':
+        gt = vaa3d_to_numpy(marker_path)
+    elif suffix == '.json':
+        gt = slicer_to_numpy(marker_path)
+    else:
+        raise ValueError('marker_path is incompatible with known formats: Vaa3d (.marker) or 3DSlicer (.json).')
+    return gt
+
+
 def get_target(
     marker_path,
     target_shape,
@@ -38,18 +53,8 @@ def get_target(
     # Radius to be used when cells are sufficiently far away
     # Radius should be never larger than distance to the nearest neighbor divided by this quantity
     # default_radius *= dim_resolution
-    try:
-        suffix = marker_path.suffix
-    except AttributeError:
-        _, suffix = os.path.splitext(marker_path)
-    
-    if suffix == '.marker':
-        X = vaa3d_to_numpy(marker_path)
-    elif suffix == '.json':
-        X = slicer_to_numpy(marker_path)
-    else:
-        raise ValueError('marker_path is incompatible with known formats: Vaa3d (.marker) or 3DSlicer (.json).')
-    
+    get_gt_as_numpy(marker_path)
+
     X = X[:, [2, 1, 0]] # transpose axis from [x, y, z] to [z, y, x]
 
     # remove points outside the target shape

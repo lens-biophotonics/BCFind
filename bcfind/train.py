@@ -13,6 +13,7 @@ import tensorflow as tf
 from numba import cuda
 
 from bcfind.config_manager import Configuration
+from bcfind.data.artificial_targets import get_gt_as_numpy
 from bcfind.models import UNet, SEUNet, ECAUNet, AttentionUNet, MoUNets
 from bcfind.localizers.blob_dog import BlobDoG
 from bcfind.losses import FramedCrossentropy3D
@@ -183,9 +184,8 @@ def main():
     Y = []
     for marker_file in marker_list:
         print(f"Loading file {marker_file}")
-        y = pd.read_csv(open(marker_file, "r"))
-        y = y[conf.data.marker_columns].dropna(0)
-        Y.append(np.array(y))
+        y = get_gt_as_numpy(marker_file)
+        Y.append(y)
 
     print(f"Saving U-Net predictions in {conf.exp.basepath}/Train_pred_lmdb")
 
