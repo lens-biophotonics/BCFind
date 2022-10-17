@@ -4,13 +4,6 @@ import networkx as nx
 
 
 def distance(x, y):
-    """TODO describe function
-
-    :param x:
-    :param y:
-    :returns:
-
-    """
     return np.sqrt(sum((x - y) ** 2))
 
 
@@ -33,8 +26,7 @@ def bipartite_match(true_centers, pred_centers, max_distance, dim_resolution=[1,
       resolution of input data (e.g. micron per voxel axes)
 
     return:
-      G : bipartite graph
-      mate: list of matches
+      DataFrame of matched and not matched centers.
     """
 
     true_centers = np.array(true_centers)
@@ -75,7 +67,6 @@ def bipartite_match(true_centers, pred_centers, max_distance, dim_resolution=[1,
     mate = nx.algorithms.matching.max_weight_matching(G, maxcardinality=False)
 
     # get node names of TP, FP and FN
-
     TP_p = [node for m in mate for node in m if node.startswith("p")]
     TP_t = [node for m in mate for node in m if node.startswith("t")]
 
