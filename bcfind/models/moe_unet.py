@@ -3,7 +3,7 @@ import tensorflow as tf
 
 from bcfind.layers import EncoderBlock
 from bcfind.models import UNet
-from bcfind.losses import ImportanceLoss, LoadLoss
+from bcfind.losses import ImportanceLoss, LoadLoss, MUMLRegularizer
 
 
 def _keep_top_k(tensor, k):
@@ -12,8 +12,18 @@ def _keep_top_k(tensor, k):
     return tf.where(mask, tensor, -np.inf)
 
 
-class GateNet(tf.keras.models.Model):
-    def __init__(self, n_blocks, n_filters, k_size, k_stride, n_experts, keep_top_k=None, add_noise=False, **kwargs):
+class GateNet(tf.keras.Model):
+    def __init__(
+        self, 
+        n_blocks, 
+        n_filters, 
+        k_size, 
+        k_stride, 
+        n_experts, 
+        keep_top_k=None, 
+        add_noise=False, 
+        **kwargs
+        ):
         super(GateNet, self).__init__(**kwargs)
         self.n_blocks = n_blocks
         self.n_filters = n_filters 
@@ -33,13 +43,13 @@ class GateNet(tf.keras.models.Model):
         self.w_conv_1 = tf.keras.layers.Conv3D(n_filters * (2 ** i), kernel_size=1, kernel_initializer='zeros')
         self.w_bn = tf.keras.layers.BatchNormalization()
         self.w_relu = tf.keras.layers.Activation('relu')
-        self.w_conv_2 = tf.keras.layers.Conv3D(n_experts, kernel_size=1, kernel_initializer='zeros')
+        self.w_conv_2 = tf.keras.layers.Conv3D(n_experts, kernel_size=1, kernel_initializer='zeros', kernel_regularizer=MUMLRegularizer(0.05))
 
         if self.add_noise:
             self.n_conv_1 = tf.keras.layers.Conv3D(n_filters * (2 ** i), kernel_size=1, kernel_initializer='zeros')
             self.n_bn = tf.keras.layers.BatchNormalization()
             self.n_relu = tf.keras.layers.Activation('relu')
-            self.n_conv_2 = tf.keras.layers.Conv3D(n_experts, kernel_size=1, kernel_initializer='zeros')
+            self.n_conv_2 = tf.keras.layers.Conv3D(n_experts, kernel_size=1, kernel_initializer='zeros', kernel_regularizer=MUMLRegularizer(0.05))
         
         self.softmax = tf.keras.layers.Activation('softmax')
 
@@ -47,7 +57,7 @@ class GateNet(tf.keras.models.Model):
         h = self.encoder_blocks[0](inputs)
         for i in range(1, len(self.encoder_blocks)):
             h = self.encoder_blocks[i](h, training=training)
-        
+
         h = self.gap(h)
 
         weights = self.w_conv_1(h)
@@ -65,7 +75,7 @@ class GateNet(tf.keras.models.Model):
             weights += noise
 
         if self.keep_top_k:
-            weights = _keep_top_k(weights)
+            weights = _keep_top_k(weights, self.keep_top_k)
         
         weights = self.softmax(weights)
         return weights
@@ -84,17 +94,17 @@ class GateNet(tf.keras.models.Model):
         return dict(list(base_config.items()) + list(config.items()))
 
 
-class MoUNets(tf.keras.models.Model):
+class MoUNets(tf.keras.Model):
     """Class for Mixture of UNets model. 
-    In the mixture of experts model, many experts are trained to output the desired target, while a gate network weights the losses of each expert
+    In the mixture of experts model, many experts are trained to output the desired target, while a gate network weights the losses of each expert \
     for each input during training or directly weights each expert output during inference (the weights obviously sum to one).
 
-    This implementation mainly refers to: \n
-        - R. Jacobs et al. 'Adaptive Mixture of Local Experts  <https://www.cs.toronto.edu/~fritz/absps/jjnh91.pdf>' \n
+    This implementation mainly refers to:
+        - R. Jacobs et al. 'Adaptive Mixture of Local Experts  <https://www.cs.toronto.edu/~fritz/absps/jjnh91.pdf>'
         - Shazeer et al. 'Outrageously Large Neural Networks <https://www.cs.toronto.edu/~hinton/absps/Outrageously.pdf>' for the importance loss in
-        the gate network \n
+        the gate network
         - Fedus et al. 'Switch Transformers <https://arxiv.org/pdf/2101.03961.pdf>' for the load loss in the gate network
-    """    
+    """
     def __init__(
         self,
         n_blocks,
@@ -163,12 +173,6 @@ class MoUNets(tf.keras.models.Model):
         elif self.balance_loss == 'load':
             self.gate_loss = LoadLoss(0.01)
     
-    def build(self, input_shape):
-        self.gate.build(input_shape)
-        for exp in self.experts:
-            exp.build(input_shape)
-        self.built = True
-
     def call(self, inputs, training=None):
         expert_weights = self.gate(inputs, training=training)
 
@@ -185,20 +189,30 @@ class MoUNets(tf.keras.models.Model):
     
     def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
         weights, y_pred = y_pred
-        
+
         if self.balance_loss in ['importance', 'load']:
             g_loss = self.gate_loss(weights)
-        else:
-            g_loss = 0
 
         weights = tf.squeeze(weights)
-        
         loss = tf.zeros_like(weights[:, 0])
-        for i in range(len(y_pred)):
+
+        # weighted crossentropy loss
+        # for i in range(self.n_experts):
+        #     exp_loss = self.compiled_loss(y, y_pred[i])
+        #     loss += exp_loss * weights[:, i]
+        
+        # weighted loss as Jacobs et al. (1991)
+        for i in range(self.n_experts):
             exp_loss = self.compiled_loss(y, y_pred[i])
-            loss += exp_loss * weights[:, i]
-        return tf.reduce_mean(loss, axis=0) + g_loss
-    
+            exp_loss = tf.exp(- 0.5 * exp_loss)
+            loss += exp_loss * weights[..., i]
+        loss = - tf.math.log(loss)
+
+        if self.balance_loss in ['importance', 'load']:
+            return tf.reduce_mean(loss, axis=0) + g_loss
+        else:
+            return tf.reduce_mean(loss, axis=0)
+
     def get_config(self,):
         config = {
             'n_blocks': self.n_blocks,
@@ -214,4 +228,3 @@ class MoUNets(tf.keras.models.Model):
         }
         base_config = super(MoUNets, self).get_config()
         return dict(list(config.items()) + list(base_config.items()))
-
