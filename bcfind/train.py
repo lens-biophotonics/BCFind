@@ -4,20 +4,19 @@ import json
 import pickle
 import shutil
 import argparse
+import itertools
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 
 from numba import cuda
-from pathlib import Path
 
 from bcfind.config_manager import Configuration
 from bcfind.models import UNet, SEUNet, ECAUNet, AttentionUNet, MoUNets
-from bcfind.utils import sigmoid
 from bcfind.localizers.blob_dog import BlobDoG
-from bcfind.losses import FramedCrossentropy3D, FramedFocalCrossentropy3D
-from bcfind.data import TrainingDataset, get_input_tf, normalize_tf
+from bcfind.losses import FramedCrossentropy3D
+from bcfind.data import TrainingDataset, get_input_tf
 
 
 def parse_args():
@@ -62,17 +61,11 @@ def main():
     ############ UNET DATA #############
     ####################################
     print('\n LOADING UNET DATA')
-    marker_list = [f'{conf.data.train_gt_dir}/{fname}' for fname in os.listdir(conf.data.train_gt_dir)]
-    tiff_list = [f'{conf.data.train_tif_dir}/{fname}' for fname in os.listdir(conf.data.train_tif_dir)]
-
-    ordered_tiff_list = []
-    for f in marker_list:
-        fname = Path(f).with_suffix('').name
-        tiff_file = [f for f in map(lambda f: Path(f), tiff_list) if f.name == fname]
-        ordered_tiff_list.append(str(tiff_file[0]))
-
+    tiff_list = sorted([f'{conf.data.train_tif_dir}/{fname}' for fname in os.listdir(conf.data.train_tif_dir)])
+    marker_list = sorted([f'{conf.data.train_gt_dir}/{fname}.marker' for fname in os.listdir(conf.data.train_tif_dir)])
+    
     data = TrainingDataset(
-        tiff_list=ordered_tiff_list, 
+        tiff_list=tiff_list, 
         marker_list=marker_list, 
         batch_size=conf.unet.batch_size, 
         dim_resolution=conf.data.dim_resolution, 
@@ -143,8 +136,7 @@ def main():
     # loss = FramedFocalCrossentropy3D(exclude_border, input_shape, gamma=3, alpha=None, from_logits=True)
     loss = FramedCrossentropy3D(conf.unet.exclude_border, conf.unet.input_shape, from_logits=True)
     # loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-    lr_schedule = tf.keras.optimizers.schedules.CosineDecay(conf.unet.learning_rate, data.cardinality().numpy(), alpha=0.0)
-    optimizer = tf.keras.optimizers.Adam(lr_schedule)
+    optimizer = tf.keras.optimizers.Adam(conf.unet.learning_rate)
 
     unet.build((None, None, None, None, 1))
     unet.compile(loss=loss, optimizer=optimizer)
@@ -189,7 +181,7 @@ def main():
     print("\n LOADING DoG DATA")
 
     Y = []
-    for marker_file in sorted(marker_list):
+    for marker_file in marker_list:
         print(f"Loading file {marker_file}")
         y = pd.read_csv(open(marker_file, "r"))
         y = y[conf.data.marker_columns].dropna(0)
@@ -202,35 +194,30 @@ def main():
     db = lmdb.open(f'{conf.exp.basepath}/Train_pred_lmdb', map_size=n*nbytes*10)
 
     with db.begin(write=True) as fx:
-        for i, tiff_file in enumerate(ordered_tiff_list):
+        for i, tiff_file in tiff_list:
             print(f"Unet prediction on file {i+1}/{len(marker_list)}")
             
-            x = get_input_tf(tf.constant(tiff_file))
-            x = normalize_tf(x)        
+            x = get_input_tf(tiff_file)    
             x = x[tf.newaxis, ..., tf.newaxis]
 
-            max_attempts = 10
-            attempt = 0
-            while True:
+            I, J = 4, 4
+            for i, j in itertools.product(range(I), range(J)):
+                if i == 0  and j == 0:
+                    pad_x = tf.identity(x)
+                    continue
                 try:
-                    print(x.shape)
-                    pred = unet(x, training=False)
+                    print(pad_x.shape)
+                    pred = unet(pad_x, training=False)
                     break
                 except (tf.errors.InvalidArgumentError, ValueError) as e:
-                    if attempt == max_attempts:
+                    print('Invalid input shape for concat layer. Try padding')
+                    paddings = tf.constant([[0, 0], [0, j], [0, i], [0, i], [0, 0]])
+                    pad_x = tf.pad(x, paddings)
+                
+                    if i == I-1 and j == J-1:
                         raise e
-                    else:
-                        if attempt % 2 == 0:
-                            print('Invalid input shape for concat layer. Try padding axis 1')
-                            paddings = tf.constant([[0, 0], [0, 1], [0, 0], [0, 0], [0, 0]])
-                        else:
-                            print('Invalid input shape for concat layer. Try padding axes [2, 3]')
-                            paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 1], [0, 0]])
-                        
-                        x = tf.pad(x, paddings)
-                        attempt += 1
 
-            pred = sigmoid(tf.squeeze(pred)) * 255
+            pred = tf.sigmoid(tf.squeeze(pred)).numpy() * 255
 
             pred = pred.astype('uint8')
             fname = tiff_file.split('/')[-1]
