@@ -4,6 +4,7 @@ from bcfind.layers.switch_normalization import SwitchNormalization
 from bcfind.layers.attention_gate import AttentionGate
 
 
+@tf.keras.utils.register_keras_serializable(package='BCFind', name='DecoderBlock')
 class DecoderBlock(tf.keras.layers.Layer):
     def __init__(
         self,  
@@ -81,6 +82,3 @@ class DecoderBlock(tf.keras.layers.Layer):
         }
         base_config = super(DecoderBlock, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
-
-
-tf.keras.utils.get_custom_objects().update({'DecoderBlock': DecoderBlock})

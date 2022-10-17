@@ -1,6 +1,7 @@
 import tensorflow as tf
 
 
+@tf.keras.utils.register_keras_serializable(package='BCFind', name='AttentionGate')
 class AttentionGate(tf.keras.layers.Layer):
     def __init__(self, **kwargs):
         super(AttentionGate, self).__init__(**kwargs)
@@ -13,8 +14,8 @@ class AttentionGate(tf.keras.layers.Layer):
     def call(self, queries, keys):
         shape = tf.shape(queries)
         
-        q = tf.reshape(queries, [shape[0], -1, shape[4]])
-        k = tf.reshape(keys, [shape[0], -1, shape[4]])
+        q = tf.reshape(queries, [shape[0], -1, shape[-1]])
+        k = tf.reshape(keys, [shape[0], -1, shape[-1]])
         
         weights = self.q_dot_k([q, k])
         weights = self.softmax(weights)
@@ -24,9 +25,6 @@ class AttentionGate(tf.keras.layers.Layer):
 
         outputs = queries + att
         return outputs
-    
+
     def get_config(self,):
         return super(AttentionGate, self).get_config()
-
-
-tf.keras.utils.get_custom_objects().update({'AttentionGate': AttentionGate})

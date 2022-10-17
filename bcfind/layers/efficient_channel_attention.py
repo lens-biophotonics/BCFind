@@ -8,6 +8,7 @@ def _get_eca_kernel_size(n_filters, gamma=2, b=1):
     return k
 
 
+@tf.keras.utils.register_keras_serializable(package='BCFind', name='EfficientChannelAttention')
 class EfficientChannelAttention(tf.keras.layers.Layer):
     def __init__(self, k_size, **kwargs):
         super(EfficientChannelAttention, self).__init__(**kwargs)
@@ -33,6 +34,3 @@ class EfficientChannelAttention(tf.keras.layers.Layer):
         }
         base_config = super(EfficientChannelAttention, self).get_config()
         return dict(list(config.items()) + list(base_config.items()))
-
-
-tf.keras.utils.get_custom_objects().update({'EfficientChannelAttention': EfficientChannelAttention})

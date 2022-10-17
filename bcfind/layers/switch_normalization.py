@@ -1,3 +1,4 @@
+import tensorflow as tf
 from tensorflow.keras.layers import Layer, BatchNormalization, InputSpec
 from tensorflow.keras import initializers
 from tensorflow.keras import regularizers
@@ -7,6 +8,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.utils import get_custom_objects
 
 
+@tf.keras.utils.register_keras_serializable(package='BCFind', name='SwitchNormalization')
 class SwitchNormalization(Layer):
     """Switchable Normalization layer
     Switch Normalization performs Instance Normalization, Layer Normalization and Batch
@@ -282,21 +284,3 @@ class SwitchNormalization(Layer):
 
     def compute_output_shape(self, input_shape):
         return input_shape
-
-
-get_custom_objects().update({'SwitchNormalization': SwitchNormalization})
-
-
-if __name__ == '__main__':
-    from keras.layers import Input
-    from keras.models import Model
-    ip = Input(shape=(None, None, 4))
-    #ip = Input(batch_shape=(100, None, None, 2))
-    x = SwitchNormalization(axis=-1)(ip)
-    model = Model(ip, x)
-    model.compile('adam', 'mse')
-    model.summary()
-
-    import numpy as np
-    x = np.random.normal(0.0, 1.0, size=(10, 8, 8, 4))
-    model.fit(x, x, epochs=5,)

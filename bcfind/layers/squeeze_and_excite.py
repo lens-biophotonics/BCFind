@@ -1,6 +1,7 @@
 import tensorflow as tf
 
 
+@tf.keras.utils.register_keras_serializable(package='BCFind', name='SqueezeAndExcite')
 class SqueezeAndExcite(tf.keras.layers.Layer):
     def __init__(self, n_input_channels, squeeze_factor=2, **kwargs):
         super(SqueezeAndExcite, self).__init__(**kwargs)
@@ -24,6 +25,3 @@ class SqueezeAndExcite(tf.keras.layers.Layer):
         }
         base_config = super(SqueezeAndExcite, self).get_config()
         return dict(list(config.items()) + list(base_config.items()))
-
-
-tf.keras.utils.get_custom_objects().update({'SqueezeAndExcite': SqueezeAndExcite})
