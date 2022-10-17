@@ -59,12 +59,11 @@ def main():
     Y = []
     for marker_file in marker_list:
         print(f"Loading file {marker_file}")
-
         y = get_gt_as_numpy(marker_file)
-        Y.append(np.array(y))
+        Y.append(y)
+
 
     print(f"\n UNet predictions on test-set")
-
     n = len(marker_list)
     nbytes = np.prod(conf.data.shape) * 1 # 4 bytes for float32: 1 byte for uint8
     db = lmdb.open(f'{conf.exp.basepath}/Test_pred_lmdb', map_size=n*nbytes*10)
