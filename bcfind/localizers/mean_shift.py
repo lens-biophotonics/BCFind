@@ -29,10 +29,16 @@ class SpatialMeanShift():
         k_size = 2 * (radius / self.dim_resolution) + 1
 
         maxima = (x == sp_img.maximum_filter(x, size=k_size.astype(int), mode='constant', cval=0.0))
+        
         if threshold == 'auto':
+            print('Adopting Kapur thresholding')
             t1, t2 = kapur_multithreshold(x, 2)
+            print(f'Removing {np.sum((maxima) & (x<t1))} seeds below {t1}')
             maxima[x < t1] = False
+    
         elif isinstance(threshold, (int, float)):
+            print('Adopting user-defined thresholding')
+            print(f'Removing {np.sum((maxima) & (x<t1))} seeds below {threshold}')
             maxima[x < threshold] = False
         
         seeds = np.array(np.where(maxima)).transpose()
@@ -68,6 +74,8 @@ class SpatialMeanShift():
             iter += 1
     
     def _remove_duplicates(self, center_mass_dict, radius):
+        print('Removing duplicates')
+        
         sorted_by_intensity = sorted(center_mass_dict.items(), key=lambda tup: tup[1], reverse=True)
         sorted_centers = np.array([tup[0] for tup in sorted_by_intensity])
         
