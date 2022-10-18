@@ -12,6 +12,7 @@ from bcfind.data.artificial_targets import get_gt_as_numpy
 from bcfind.localizers import BlobDoG
 from bcfind.utils import metrics
 from bcfind.data import get_input_tf
+from bcfind.models import predict
 
 
 def parse_args():
@@ -73,28 +74,7 @@ def main():
             print(f"Unet prediction on file {i+1}/{len(tiff_list)}")
             
             x = get_input_tf(tiff_file)
-            x = x[tf.newaxis, ..., tf.newaxis]
-
-            max_attempts = 10
-            attempt = 0
-            while True:
-                try:
-                    pred = unet(x, training=False)
-                    break
-                except (tf.errors.InvalidArgumentError, ValueError) as e:
-                    if attempt == max_attempts:
-                        raise e
-                    else:
-                        print('Invalid input shape for concat layer. Need padding')
-                        attempt += 1
-                        if attempt % 2 != 0:
-                            paddings = tf.constant([[0, 0], [0, 1], [0, 0], [0, 0], [0, 0]])
-                        else:
-                            paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 1], [0, 0]])
-                        
-                        x = tf.pad(x, paddings)                    
-            
-            pred = tf.sigmoid(tf.squeeze(pred)).numpy() * 255
+            pred = predict(x, unet) * 255
 
             pred = pred.astype('uint8')
             fname = tiff_file.split('/')[-1]

@@ -4,17 +4,15 @@ import json
 import pickle
 import shutil
 import argparse
-import itertools
 
 import numpy as np
-import pandas as pd
 import tensorflow as tf
 
 from numba import cuda
 
 from bcfind.config_manager import Configuration
 from bcfind.data.artificial_targets import get_gt_as_numpy
-from bcfind.models import UNet, SEUNet, ECAUNet, AttentionUNet, MoUNets
+from bcfind.models import UNet, SEUNet, ECAUNet, AttentionUNet, MoUNets, predict
 from bcfind.localizers.blob_dog import BlobDoG
 from bcfind.losses import FramedCrossentropy3D
 from bcfind.data import TrainingDataset, get_input_tf
@@ -199,25 +197,7 @@ def main():
             
             x = get_input_tf(tiff_file)    
             x = x[tf.newaxis, ..., tf.newaxis]
-
-            I, J = 4, 4
-            for i, j in itertools.product(range(I), range(J)):
-                if i == 0  and j == 0:
-                    pad_x = tf.identity(x)
-                    continue
-                try:
-                    print(pad_x.shape)
-                    pred = unet(pad_x, training=False)
-                    break
-                except (tf.errors.InvalidArgumentError, ValueError) as e:
-                    print('Invalid input shape for concat layer. Try padding')
-                    paddings = tf.constant([[0, 0], [0, j], [0, i], [0, i], [0, 0]])
-                    pad_x = tf.pad(x, paddings)
-                
-                    if i == I-1 and j == J-1:
-                        raise e
-
-            pred = tf.sigmoid(tf.squeeze(pred)).numpy() * 255
+            pred = predict(x) * 255
 
             pred = pred.astype('uint8')
             fname = tiff_file.split('/')[-1]
