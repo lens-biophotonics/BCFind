@@ -5,6 +5,7 @@ import pandas as pd
 import scipy.ndimage.filters as sp_filt
 import scipy.spatial.distance as sp_dist
 
+from pathlib import Path
 from colorama import Fore as FG
 
 from bcfind.utils import iround
@@ -27,9 +28,9 @@ def slicer_to_numpy(marker_path):
 
 
 def get_gt_as_numpy(marker_path):
-    try:
+    if isinstance(marker_path, Path):
         suffix = marker_path.suffix
-    except AttributeError:
+    else:
         _, suffix = os.path.splitext(marker_path)
     
     if suffix == '.marker':
@@ -38,7 +39,7 @@ def get_gt_as_numpy(marker_path):
         gt = slicer_to_numpy(marker_path)
     else:
         raise ValueError('marker_path is incompatible with known formats: Vaa3d (.marker) or 3DSlicer (.json).')
-    return gt
+    return gt[:, [2, 1, 0]] # transpose axis from [x, y, z] to [z, y, x]
 
 
 def get_target(
@@ -53,9 +54,7 @@ def get_target(
     # Radius to be used when cells are sufficiently far away
     # Radius should be never larger than distance to the nearest neighbor divided by this quantity
     # default_radius *= dim_resolution
-    get_gt_as_numpy(marker_path)
-
-    X = X[:, [2, 1, 0]] # transpose axis from [x, y, z] to [z, y, x]
+    X = get_gt_as_numpy(marker_path)
 
     # remove points outside the target shape
     X = X[(X[:, 0]>0) & (X[:, 1]>0) & (X[:, 2]>0), :]
