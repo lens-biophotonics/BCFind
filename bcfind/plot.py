@@ -1,116 +1,111 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from matplotlib import animation, rc
-from matplotlib.ticker import MultipleLocator
+from matplotlib.animation import FuncAnimation
 
 
-def make_video(volume, out_filename):
-    x = (255 * volume).astype(np.uint8)
+def normalize(x):
+    return (x - x.min()) / (x.max() - x.min())
 
-    print("Making video of", out_filename, "maxval=", x.max())
-    fps = 8
-    n_seconds = x.shape[2] // fps
-    ratio = x.shape[1] / x.shape[0]
 
+def get_slice_center_idxs_from_array(centers, sl, slice_width=1, axis=0):
+    pts_idx = (centers[:, axis] >= sl - slice_width // 2) & (centers[:, axis] < sl + slice_width // 2)
+    return pts_idx
+
+
+def make_video(input, target=None, nn_pred=None, center_pred=None, slide_axis=0, out_filename=None, fps=2):
+    plt_axes = [ax for ax in range(len(input.shape)) if ax != slide_axis]
+    n_seconds = input.shape[slide_axis] // fps
+
+    # Normalize all volumes
+    input = normalize(input) * 255
+    if target is not None:
+        target = normalize(target) * 255
+        inp_trg = np.stack([input, np.zeros_like(input), target], axis=3)
+    if nn_pred is not None:
+        nn_pred = normalize(nn_pred) * 255
+        inp_pred = np.stack([input, np.zeros_like(input), nn_pred], axis=3)
+    
+    # Set image to show
+    # if target is specified input and target are superimposed on the red and blue channels respectively
+    # if nn_pred is specified input and nn_pred are superimposed on the red and blue channels respectively
+    # if both target and nn_pred are specified the 2 superimposition above are concatenated on the y axis, first the input+target then the input+nn_pred
+    x = input.astype('uint8')
+    if target is not None and nn_pred is not None:
+        zeros_shape = list(inp_trg.shape)
+        zeros_shape[plt_axes[1]] = 5
+        zeros = np.zeros(zeros_shape, dtype='uint8')
+
+        x = np.concatenate(
+            [
+                inp_trg.astype('uint8'),
+                zeros, 
+                inp_pred.astype('uint8'),
+            ],
+            axis=plt_axes[1]
+            )
+
+    elif target is not None:
+        x = inp_trg.astype('uint8')
+    elif nn_pred is not None:
+        x = inp_pred.astype('uint8')
+    
+    # Set scatter to plot
+    if center_pred is not None:
+        try:
+            print('Found RGB columns in center_pred. Using them in scatterplot')
+            colors = np.array(center_pred.loc[:, ['R', 'G', 'B']]) / 255
+        except KeyError:
+            print('No RGB columns in center_pred. Using orange for all centers')
+            colors = 'orange'
+        
+        center_pred = np.array(center_pred)[:, :3]
+        pts_idx = get_slice_center_idxs_from_array(center_pred, 0, slice_width=6, axis=slide_axis)
+        # if target and nn_pred place points on inp_pred
+        if target is not None and nn_pred is not None:
+            center_pred[:, plt_axes[1]] += input.shape[plt_axes[1]] + 5
+
+    # Set figure
+    ratio = x.shape[plt_axes[1]] / x.shape[plt_axes[0]]
     fig = plt.figure(figsize=(int(8 * ratio), 8))
     plt.grid(b=True, which="major", color="#4444aa", alpha=0.5)
     plt.grid(b=True, which="minor", color="#225500", alpha=0.5)
+    plt.axis('off')
 
-    im = plt.imshow(
-        x[..., 0],
+    img = plt.imshow(
+        x.take(0, axis=slide_axis),
         interpolation="none",
         aspect="auto",
         cmap="inferno",
         vmin=0,
         vmax=255,
     )
-    plt.colorbar()
-
-    ax = fig.axes[0]
-    ax.xaxis.set_major_locator(MultipleLocator(100))
-    ax.xaxis.set_minor_locator(MultipleLocator(10))
-    ax.yaxis.set_major_locator(MultipleLocator(100))
-    ax.yaxis.set_minor_locator(MultipleLocator(10))
+    if center_pred is not None:
+        sct = plt.scatter(
+            center_pred[pts_idx, plt_axes[1]], 
+            center_pred[pts_idx, plt_axes[0]], 
+            edgecolors=colors[pts_idx, :], 
+            s=150, 
+            c='none'
+            )
 
     def animate_func(z):
-        im.set_array(x[..., z])
-        return [im]
+        img.set_data(x.take(z, axis=slide_axis))
+        if center_pred is not None:
+            pts_idx = get_slice_center_idxs_from_array(center_pred, z, slice_width=6, axis=slide_axis)
+            sct.set_offsets(np.c_[center_pred[pts_idx, plt_axes[1]], center_pred[pts_idx, plt_axes[0]]])
+            sct.set_edgecolors(c=colors[pts_idx, :])
+            return img, sct
+        else:
+            return img
 
-    anim = animation.FuncAnimation(
+    anim = FuncAnimation(
         fig,
         animate_func,
         frames=n_seconds * fps,
         interval=1000 / fps,  # in ms
     )
-    anim.save(out_filename, fps=fps, extra_args=["-vcodec", "libx264"])
+    if out_filename:
+        anim.save(out_filename, fps=fps)
 
-
-def make_video_with_predictions(
-    volume, bcfind_pred, slide_axis=0, slice_width=10, fps=6, **kwargs
-):
-    volume = volume - volume.min()
-    volume = (volume / volume.max()) * 255
-    plt_axes = [ax for ax in range(len(volume.shape)) if ax != slide_axis]
-
-    def get_slice_cells_idx(points, sl):
-        pts_idx = (points[:, slide_axis] >= sl - slice_width // 2) & (
-            points[:, slide_axis] < sl + slice_width // 2
-        )
-        return pts_idx
-
-    # slice_pts = bcfind_pred.loc[pts_idx, :]
-    colors = np.array(bcfind_pred.loc[:, ['R', 'G', 'B']]) / 255
-    bcfind_pred = np.array(bcfind_pred)
-    pts_idx = get_slice_cells_idx(bcfind_pred, 0)
-
-    fig, ax = plt.subplots(**kwargs)
-    img = ax.imshow(
-        volume.take(0, axis=slide_axis),
-        interpolation="none",
-        aspect="auto",
-        cmap="inferno",
-        vmin=0,
-        vmax=255,
-    )
-    sc = ax.scatter(
-        bcfind_pred[pts_idx, plt_axes[1]], 
-        bcfind_pred[pts_idx, plt_axes[0]], 
-        edgecolors=colors[pts_idx, :], 
-        s=150, 
-        c='none'
-        )
-    
-    plt.axis('off')
-    plt.close()
-
-    def init():
-        pts_idx = get_slice_cells_idx(bcfind_pred, 0)
-        slice_pts = bcfind_pred[pts_idx, :]
-
-        img.set_data(volume.take(0, axis=slide_axis))
-        sc.set_offsets(np.c_[slice_pts[:, plt_axes[1]], slice_pts[:, plt_axes[0]]])
-        sc.set_edgecolors(c=colors[pts_idx, :])
-        return img, sc
-
-    def animate_func(sl):
-        pts_idx = get_slice_cells_idx(bcfind_pred, sl)
-        slice_pts = bcfind_pred[pts_idx, :]
-
-        img.set_data(volume.take(sl, axis=slide_axis))
-        sc.set_offsets(np.c_[slice_pts[:, plt_axes[1]], slice_pts[:, plt_axes[0]]])
-        sc.set_edgecolors(c=colors[pts_idx, :])
-
-        return img, sc
-
-    anim = animation.FuncAnimation(
-        fig,
-        animate_func,
-        init_func=init,
-        frames=volume.shape[slide_axis],
-        interval=1000 / fps,
-        blit=True,
-    )
-
-    # rc("animation", html="html5")
     return anim
