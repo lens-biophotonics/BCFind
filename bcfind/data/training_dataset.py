@@ -9,7 +9,7 @@ import concurrent.futures as cf
 from pathlib import Path
 
 from zetastitcher import InputFile
-from bcfind.data import get_target
+from bcfind.data.artificial_targets import get_target
 from bcfind.data.augmentation import *
 
 
@@ -48,7 +48,6 @@ def get_input_tf(input_file):
         return input_image.astype(np.float32)
 
     input = tf.numpy_function(get_input_wrap, [input_file], tf.float32)
-
     input = normalize_tf(input)
     return input
 
