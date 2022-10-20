@@ -27,31 +27,38 @@ def parse_args():
         ),
     )
     parser.add_argument("config", type=str, help="YAML Configuration file")
+    parser.add_argument('--gpu', type=int, default=-1, help='Index of GPU to use. Default to -1')
     return parser.parse_args()
 
 
 def main():
-    gpus = tf.config.list_physical_devices('GPU')
-    tf.config.set_visible_devices(gpus[-1], 'GPU')
-    tf.config.experimental.set_memory_growth(gpus[-1], True)
-
     args = parse_args()
+
+    gpus = tf.config.list_physical_devices('GPU')
+    tf.config.set_visible_devices(gpus[args.gpu], 'GPU')
+    tf.config.experimental.set_memory_growth(gpus[args.gpu], True)
+
     conf = Configuration(args.config)
 
     ######################################
     ############ CREATE DIRS #############
     ######################################
     config_name = args.config.split('/')[-1]
+
+    # Create experiment directory and copy the config file there
     if not os.path.isdir(conf.exp.basepath):
         os.makedirs(conf.exp.basepath)
         shutil.copyfile(args.config, f'{conf.exp.basepath}/{config_name}')
     
+    # Create UNet checkpoint dir
     if not os.path.isdir(conf.unet.checkpoint_dir):
         os.makedirs(conf.unet.checkpoint_dir)
     
+    # Create DoG checkpoint dir
     if not os.path.isdir(conf.dog.checkpoint_dir):
         os.makedirs(conf.dog.checkpoint_dir)
     
+    # Create UNet tensorboard dir
     if os.path.isdir(conf.unet.tensorboard_dir):
         shutil.rmtree(conf.unet.tensorboard_dir, ignore_errors=True)
         os.makedirs(conf.unet.tensorboard_dir)
@@ -71,6 +78,7 @@ def main():
         output_shape=conf.unet.input_shape, 
         augmentations=conf.data_aug.op_args, 
         augmentations_prob=conf.data_aug.op_probs,
+        use_lmdb_data=False,
         )
 
     ####################################
@@ -121,11 +129,12 @@ def main():
             n_filters=conf.unet.n_filters, 
             k_size=conf.unet.k_size, 
             k_stride=conf.unet.k_stride,
-            n_experts=conf.unet.n_experts,
-            keep_top_k=conf.unet.top_k_experts,
-            add_noise=conf.unet.moe_noise,
             dropout=conf.unet.dropout, 
-            regularizer=conf.unet.regularizer
+            regularizer=conf.unet.regularizer,
+            n_experts=conf.unet.moe_n_experts,
+            keep_top_k=conf.unet.moe_top_k_experts,
+            add_noise=conf.unet.moe_noise,
+            balance_loss=conf.unet.moe_balance_loss,
             )
     else:
         raise ValueError(f'UNet model must be one of ["unet", "se-unet", "eca-unet", "attention-unet", "moe-unet"]. \
@@ -186,7 +195,6 @@ def main():
         Y.append(y)
 
     print(f"Saving U-Net predictions in {conf.exp.basepath}/Train_pred_lmdb")
-
     n = len(marker_list)
     nbytes = np.prod(conf.data.shape) * 1 # 4 bytes for float32: 1 byte for uint8
     db = lmdb.open(f'{conf.exp.basepath}/Train_pred_lmdb', map_size=n*nbytes*10)
@@ -196,18 +204,17 @@ def main():
             print(f"Unet prediction on file {i+1}/{len(marker_list)}")
             
             x = get_input_tf(tiff_file)    
-            x = x[tf.newaxis, ..., tf.newaxis]
-            pred = predict(x) * 255
+            pred = predict(x).numpy()
+            pred = (pred * 255).astype('uint8')
 
-            pred = pred.astype('uint8')
             fname = tiff_file.split('/')[-1]
             fx.put(key=fname.encode(), value=pickle.dumps(pred))
-
+    
+    db.close()
     ####################################
     ############### DOG ################
     ####################################
-    del unet
-    cuda.close()
+    db = lmdb.open(f'{conf.exp.basepath}/Train_pred_lmdb')
 
     dog = BlobDoG(3, conf.data.dim_resolution, conf.dog.exclude_border)
     with db.begin() as fx:
@@ -223,9 +230,6 @@ def main():
 
     dog_par = dog.get_parameters()
     print(f"Best parameters found for DoG: {dog_par}")
-
-    with open(f"{conf.dog.checkpoint_dir}/parameters.json", "w") as outfile:
-        json.dump(dog_par, outfile)
 
     db.close()
 

@@ -23,22 +23,25 @@ def parse_args():
             prog, max_help_position=52, width=90
         ),
     )
-    parser.add_argument("config", type=str, help="path to the YAML configuration file")
+    parser.add_argument("config", type=str, help="Path to the YAML configuration file")
     parser.add_argument(
-        '--save-pred', 
+        '--save-pred',
+        type=bool, 
         default=False, 
         action='store_true', 
-        help="wheter to save the predicted locations in the experiment directory or not"
+        help="Wheter to save the predicted locations in the experiment directory or not"
         )
+    parser.add_argument('--gpu', type=int, default=-1, help='Which GPU to use. Default to -1')
     return parser.parse_args()
 
 
 def main():
-    gpus = tf.config.list_physical_devices('GPU')
-    tf.config.set_visible_devices(gpus[-1], 'GPU')
-    tf.config.experimental.set_memory_growth(gpus[-1], True)
-
     args = parse_args()
+    
+    gpus = tf.config.list_physical_devices('GPU')
+    tf.config.set_visible_devices(gpus[args.gpu], 'GPU')
+    tf.config.experimental.set_memory_growth(gpus[args.gpu], True)
+
     conf = Configuration(args.config)
     
     ####################################
@@ -52,8 +55,14 @@ def main():
     ###########################################
     print('\n', 'PREPARING TEST DATA')
 
-    marker_list = sorted([f'{conf.data.test_gt_dir}/{fname}' for fname in os.listdir(conf.data.test_gt_dir)])
-    tiff_list = sorted([f'{conf.data.test_tif_dir}/{fname}' for fname in os.listdir(conf.data.test_tif_dir)])
+    marker_list = sorted([
+        f'{conf.data.test_gt_dir}/{fname}.marker' 
+        for fname in os.listdir(conf.data.test_tif_dir)
+        ])
+    tiff_list = sorted([
+        f'{conf.data.test_tif_dir}/{fname}' 
+        for fname in os.listdir(conf.data.test_tif_dir)
+        ])
 
     assert len(tiff_list) == len(marker_list), f'Number of tiff files, {len(tiff_list)}, differs from that of marker files, {len(marker_list)}.'
 
@@ -62,7 +71,6 @@ def main():
         print(f"Loading file {marker_file}")
         y = get_gt_as_numpy(marker_file)
         Y.append(y)
-
 
     print(f"\n UNet predictions on test-set")
     n = len(marker_list)
@@ -74,22 +82,25 @@ def main():
             print(f"Unet prediction on file {i+1}/{len(tiff_list)}")
             
             x = get_input_tf(tiff_file)
-            pred = predict(x, unet) * 255
+            pred = predict(x, unet).numpy()
+            pred = (pred * 255).astype('uint8')
 
-            pred = pred.astype('uint8')
             fname = tiff_file.split('/')[-1]
             fx.put(key=fname.encode(), value=pickle.dumps(pred))
 
+    db.close()
     ##########################################
     ############ DOG PREDICTIONS #############
     ##########################################
     print(f"\n DoG predictions and evaluation on test-set")
+    
+    db = lmdb.open(f'{conf.exp.basepath}/Test_pred_lmdb')
 
     dog = BlobDoG(3, conf.data.dim_resolution, conf.dog.exclude_border)
     dog_par = json.load(open(f"{conf.dog.checkpoint_dir}/BlobDoG_parameters.json", "r"))
     dog.set_parameters(dog_par)
-
     print(f"Best parameters found for DoG: {dog_par}")
+
     with db.begin() as fx:
         res = []
         for i, file_path in enumerate(tiff_list):
@@ -109,7 +120,7 @@ def main():
     db.close()
 
     res = pd.concat(res)
-    res.to_csv(f"{conf.exp.basepath}/Test_eval.csv")
+    res.to_csv(f"{conf.exp.basepath}/Test_eval.csv", index=False)
     perf = metrics(res)
 
     print(f"\n Test-set evaluated with {perf}")
