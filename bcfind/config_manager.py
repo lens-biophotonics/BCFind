@@ -38,13 +38,6 @@ class Configuration:
             self.data.test_tif_dir = f"{self.data.basepath}/Tiff_files/Test"
             self.data.test_gt_dir = f"{self.data.basepath}/GT_files/Test"
 
-        if self.preproc.downscale is not None:
-            self.data.shape = np.ceil(
-                self.data.shape * self.preproc.downscale
-            ).astype(int)
-
-            self.data.dim_resolution = self.data.dim_resolution / self.preproc.downscale
-
         # Experiment
         self.exp.basepath = f"{self.exp.basepath}/{self.exp.name}"
 
@@ -81,13 +74,13 @@ class Configuration:
                 Got instead {key}
                 ''')
             
-        self.unet.checkpoint_dir = f"{self.exp.basepath}/UNet_checkpoint"
+        self.unet.checkpoint_dir = f"{self.exp.basepath}/UNet_checkpoints"
         self.unet.tensorboard_dir = f"{self.exp.basepath}/UNet_tensorboard"
 
         # DoG
         self.dog.exclude_border = np.array(self.unet.exclude_border) + self.dog.exclude_border
 
-        self.dog.checkpoint_dir = f"{self.exp.basepath}/DoG_checkpoint"
+        self.dog.checkpoint_dir = f"{self.exp.basepath}/DoG_checkpoints"
         self.dog.predictions_dir = f"{self.exp.basepath}/{self.data.name}_predictions"
 
         # VirtualFusedVolume
