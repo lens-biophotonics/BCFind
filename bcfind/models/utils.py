@@ -23,5 +23,5 @@ def predict(input, model):
             if i == I-1 and j == J-1:
                 raise e
 
-    pred = tf.sigmoid(tf.squeeze(pred)).numpy()
+    pred = tf.sigmoid(tf.squeeze(pred))
     return pred
