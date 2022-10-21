@@ -6,6 +6,7 @@ import functools as ft
 import scipy.ndimage as sp_img 
 import scipy.spatial as sp_spt
 import sklearn.neighbors as sk_ngbr
+from bcfind.localizers.utils import get_counts_from_bm_eval
 
 from pythreshold.global_th.entropy import kapur_multithreshold
 
@@ -241,12 +242,7 @@ class SpatialMeanShift():
         if evaluation_type == 'complete':
             return labeled_centers
         else:
-            TP = np.sum(labeled_centers.name == "TP")
-            FP = np.sum(labeled_centers.name == "FP")
-            FN = np.sum(labeled_centers.name == "FN")
-
-            eval_counts = pd.DataFrame([TP, FP, FN, TP + FP, TP + FN]).T
-            eval_counts.columns = ["TP", "FP", "FN", "tot_pred", "tot_true"]
+            eval_counts = get_counts_from_bm_eval(labeled_centers)
             if evaluation_type == "counts":
                 return eval_counts
             else:

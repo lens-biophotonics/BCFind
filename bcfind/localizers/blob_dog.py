@@ -13,8 +13,10 @@ import cucim.skimage.feature as cm_skim_feat
 
 from scipy import spatial
 
-from bcfind.localizers.bipartite_match import bipartite_match
+from bcfind.localizers import bipartite_match
+from bcfind.localizers.utils import get_counts_from_bm_eval
 from bcfind.utils import metrics, remove_border_points_from_array, remove_border_points_from_df
+
 
 
 mempool = cp.get_default_memory_pool()
@@ -424,12 +426,8 @@ class BlobDoG:
         if evaluation_type == "complete":
             return labeled_centers
         else:
-            TP = np.sum(labeled_centers.name == "TP")
-            FP = np.sum(labeled_centers.name == "FP")
-            FN = np.sum(labeled_centers.name == "FN")
+            eval_counts = get_counts_from_bm_eval(labeled_centers)
 
-            eval_counts = pd.DataFrame([TP, FP, FN, y_pred.shape[0], y_true.shape[0]]).T
-            eval_counts.columns = ["TP", "FP", "FN", "tot_pred", "tot_true"]
             if evaluation_type == "counts":
                 return eval_counts
             else:
@@ -482,12 +480,7 @@ class BlobDoG:
         if evaluation_type == 'complete':
             return labeled_centers
         else:
-            TP = np.sum(labeled_centers.name == "TP")
-            FP = np.sum(labeled_centers.name == "FP")
-            FN = np.sum(labeled_centers.name == "FN")
-
-            eval_counts = pd.DataFrame([TP, FP, FN, TP + FP, TP + FN]).T
-            eval_counts.columns = ["TP", "FP", "FN", "tot_pred", "tot_true"]
+            eval_counts = get_counts_from_bm_eval(labeled_centers)
             if evaluation_type == "counts":
                 return eval_counts
             else:
