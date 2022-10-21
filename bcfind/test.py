@@ -25,8 +25,7 @@ def parse_args():
     )
     parser.add_argument("config", type=str, help="Path to the YAML configuration file")
     parser.add_argument(
-        '--save-pred',
-        type=bool, 
+        '--save-pred', 
         default=False, 
         action='store_true', 
         help="Wheter to save the predicted locations in the experiment directory or not"
@@ -55,23 +54,19 @@ def main():
     ###########################################
     print('\n', 'PREPARING TEST DATA')
 
-    marker_list = sorted([
-        f'{conf.data.test_gt_dir}/{fname}.marker' 
-        for fname in os.listdir(conf.data.test_tif_dir)
-        ])
-    tiff_list = sorted([
-        f'{conf.data.test_tif_dir}/{fname}' 
-        for fname in os.listdir(conf.data.test_tif_dir)
-        ])
+    marker_list = sorted([f'{conf.data.test_gt_dir}/{fname}.marker' for fname in os.listdir(conf.data.test_tif_dir)])
+    tiff_list = sorted([f'{conf.data.test_tif_dir}/{fname}' for fname in os.listdir(conf.data.test_tif_dir)])
 
     assert len(tiff_list) == len(marker_list), f'Number of tiff files, {len(tiff_list)}, differs from that of marker files, {len(marker_list)}.'
 
+    # True cell coordinates
     Y = []
     for marker_file in marker_list:
         print(f"Loading file {marker_file}")
         y = get_gt_as_numpy(marker_file)
         Y.append(y)
 
+    # UNet predictions
     print(f"\n UNet predictions on test-set")
     n = len(marker_list)
     nbytes = np.prod(conf.data.shape) * 1 # 4 bytes for float32: 1 byte for uint8
@@ -89,6 +84,7 @@ def main():
             fx.put(key=fname.encode(), value=pickle.dumps(pred))
 
     db.close()
+
     ##########################################
     ############ DOG PREDICTIONS #############
     ##########################################
