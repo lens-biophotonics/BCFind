@@ -101,10 +101,10 @@ class AttentionUNet(tf.keras.Model):
             self.dropouts = []
             for i in range(self.n_blocks * 2 - 1):
                 if i == 0:
-                    drp = tf.keras.layers.Dropout(dropout / 2)
+                    drp = tf.keras.layers.SpatialDropout3D(dropout / 2)
                     self.dropouts.append(drp)
                 else:
-                    drp = tf.keras.layers.Dropout(dropout)
+                    drp = tf.keras.layers.SpatialDropout3D(dropout)
                     self.dropouts.append(drp)
         
         # Last predictor layer
