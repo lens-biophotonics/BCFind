@@ -38,11 +38,15 @@ def main():
     args = parse_args()
     
     gpus = tf.config.list_physical_devices('GPU')
+    print(gpus)
     tf.config.set_visible_devices(gpus[args.gpu], 'GPU')
     tf.config.experimental.set_memory_growth(gpus[args.gpu], True)
 
     conf = Configuration(args.config)
     
+    marker_list = sorted([f'{conf.data.test_gt_dir}/{fname}.marker' for fname in os.listdir(conf.data.test_tif_dir)])
+    tiff_list = sorted([f'{conf.data.test_tif_dir}/{fname}' for fname in os.listdir(conf.data.test_tif_dir)])
+
     ####################################
     ############ LOAD UNET #############
     ####################################
@@ -53,11 +57,6 @@ def main():
     ############ UNET PREDICTIONS #############
     ###########################################
     print('\n', 'PREPARING TEST DATA')
-
-    marker_list = sorted([f'{conf.data.test_gt_dir}/{fname}.marker' for fname in os.listdir(conf.data.test_tif_dir)])
-    tiff_list = sorted([f'{conf.data.test_tif_dir}/{fname}' for fname in os.listdir(conf.data.test_tif_dir)])
-
-    assert len(tiff_list) == len(marker_list), f'Number of tiff files, {len(tiff_list)}, differs from that of marker files, {len(marker_list)}.'
 
     # True cell coordinates
     Y = []
