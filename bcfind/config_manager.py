@@ -84,8 +84,8 @@ class Configuration:
         self.dog.predictions_dir = f"{self.exp.basepath}/{self.data.name}_predictions"
 
         # VirtualFusedVolume
-        self.vfv.sub_shape = np.array(self.vfv.sub_shape)
-        self.vfv.sub_overlap = np.array(self.vfv.sub_overlap)
+        self.vfv.patch_shape = np.array(self.vfv.patch_shape)
+        self.vfv.patch_overlap = np.array(self.vfv.patch_overlap)
 
         self.vfv.outdir = f"{self.vfv.outdir}/{self.vfv.name}"
         self.vfv.pred_outdir = f"{self.vfv.outdir}/stack_pred"
