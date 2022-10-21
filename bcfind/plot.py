@@ -16,39 +16,22 @@ def get_slice_center_idxs_from_array(centers, sl, slice_width=1, axis=0):
 def make_video(input, target=None, nn_pred=None, center_pred=None, slide_axis=0, out_filename=None, fps=2):
     plt_axes = [ax for ax in range(len(input.shape)) if ax != slide_axis]
     n_seconds = input.shape[slide_axis] // fps
-
-    # Normalize all volumes
-    input = normalize(input) * 255
-    if target is not None:
-        target = normalize(target) * 255
-        inp_trg = np.stack([input, np.zeros_like(input), target], axis=3)
-    if nn_pred is not None:
-        nn_pred = normalize(nn_pred) * 255
-        inp_pred = np.stack([input, np.zeros_like(input), nn_pred], axis=3)
     
     # Set image to show
     # if target is specified input and target are superimposed on the red and blue channels respectively
     # if nn_pred is specified input and nn_pred are superimposed on the red and blue channels respectively
     # if both target and nn_pred are specified the 2 superimposition above are concatenated on the y axis, first the input+target then the input+nn_pred
     x = input.astype('uint8')
-    if target is not None and nn_pred is not None:
-        zeros_shape = list(inp_trg.shape)
-        zeros_shape[plt_axes[1]] = 5
+    
+    if target is not None or nn_pred is not None:
+        zeros_shape = list(input.shape)
+        zeros_shape[plt_axes[1]] = 3
         zeros = np.zeros(zeros_shape, dtype='uint8')
 
-        x = np.concatenate(
-            [
-                inp_trg.astype('uint8'),
-                zeros, 
-                inp_pred.astype('uint8'),
-            ],
-            axis=plt_axes[1]
-            )
-
-    elif target is not None:
-        x = inp_trg.astype('uint8')
-    elif nn_pred is not None:
-        x = inp_pred.astype('uint8')
+    if target is not None:
+        x = np.concatenate([x, zeros, target.astype('uint8')], axis=plt_axes[1])
+    if nn_pred is not None:
+        x = np.concatenate([x, zeros, nn_pred.astype('uint8')], axis=plt_axes[1])
     
     # Set scatter to plot
     if center_pred is not None:
@@ -61,9 +44,6 @@ def make_video(input, target=None, nn_pred=None, center_pred=None, slide_axis=0,
         
         center_pred = np.array(center_pred)[:, :3]
         pts_idx = get_slice_center_idxs_from_array(center_pred, 0, slice_width=6, axis=slide_axis)
-        # if target and nn_pred place points on inp_pred
-        if target is not None and nn_pred is not None:
-            center_pred[:, plt_axes[1]] += input.shape[plt_axes[1]] + 5
 
     # Set figure
     ratio = x.shape[plt_axes[1]] / x.shape[plt_axes[0]]
@@ -85,7 +65,7 @@ def make_video(input, target=None, nn_pred=None, center_pred=None, slide_axis=0,
             center_pred[pts_idx, plt_axes[1]], 
             center_pred[pts_idx, plt_axes[0]], 
             edgecolors=colors[pts_idx, :], 
-            s=150, 
+            s=200, 
             c='none'
             )
 
