@@ -28,6 +28,7 @@ def parse_args():
     )
     parser.add_argument("config", type=str, help="YAML Configuration file")
     parser.add_argument('--gpu', type=int, default=-1, help='Index of GPU to use. Default to -1')
+    parser.add_argument('--only-dog', default=False, action='store_true', help='Skip UNet training and train only the DoG')
     return parser.parse_args()
 
 
@@ -40,177 +41,182 @@ def main():
 
     conf = Configuration(args.config)
 
-    ######################################
-    ############ CREATE DIRS #############
-    ######################################
-    config_name = args.config.split('/')[-1]
-
-    # Create experiment directory and copy the config file there
-    if not os.path.isdir(conf.exp.basepath):
-        os.makedirs(conf.exp.basepath)
-        shutil.copyfile(args.config, f'{conf.exp.basepath}/{config_name}')
-    
-    # Create UNet checkpoint dir
-    if not os.path.isdir(conf.unet.checkpoint_dir):
-        os.makedirs(conf.unet.checkpoint_dir)
-    
-    # Create DoG checkpoint dir
-    if not os.path.isdir(conf.dog.checkpoint_dir):
-        os.makedirs(conf.dog.checkpoint_dir)
-    
-    # Create UNet tensorboard dir
-    if os.path.isdir(conf.unet.tensorboard_dir):
-        shutil.rmtree(conf.unet.tensorboard_dir, ignore_errors=True)
-        os.makedirs(conf.unet.tensorboard_dir)
-
-    ####################################
-    ############ UNET DATA #############
-    ####################################
-    print('\n LOADING UNET DATA')
     tiff_list = sorted([f'{conf.data.train_tif_dir}/{fname}' for fname in os.listdir(conf.data.train_tif_dir)])
     marker_list = sorted([f'{conf.data.train_gt_dir}/{fname}.marker' for fname in os.listdir(conf.data.train_tif_dir)])
-    
-    data = TrainingDataset(
-        tiff_list=tiff_list, 
-        marker_list=marker_list, 
-        batch_size=conf.unet.batch_size, 
-        dim_resolution=conf.data.dim_resolution, 
-        output_shape=conf.unet.input_shape, 
-        augmentations=conf.data_aug.op_args, 
-        augmentations_prob=conf.data_aug.op_probs,
-        use_lmdb_data=False,
+
+    if not args.only_dog:
+        ######################################
+        ############ CREATE DIRS #############
+        ######################################
+
+        # Create experiment directory and copy the config file there
+        if not os.path.isdir(conf.exp.basepath):
+            os.makedirs(conf.exp.basepath, exist_ok=True)
+            config_name = args.config.split('/')[-1]
+            shutil.copyfile(args.config, f'{conf.exp.basepath}/{config_name}')
+        
+        # Create UNet checkpoint dir
+        if not os.path.isdir(conf.unet.checkpoint_dir):
+            os.makedirs(conf.unet.checkpoint_dir, exist_ok=True)
+        
+        # Create UNet tensorboard dir
+        if os.path.isdir(conf.unet.tensorboard_dir):
+            shutil.rmtree(conf.unet.tensorboard_dir, ignore_errors=True)
+            os.makedirs(conf.unet.tensorboard_dir)
+
+        ####################################
+        ############ UNET DATA #############
+        ####################################
+        print('\n LOADING UNET DATA')
+        
+        data = TrainingDataset(
+            tiff_list=tiff_list, 
+            marker_list=marker_list, 
+            batch_size=conf.unet.batch_size, 
+            dim_resolution=conf.data.dim_resolution, 
+            output_shape=conf.unet.input_shape, 
+            augmentations=conf.data_aug.op_args, 
+            augmentations_prob=conf.data_aug.op_probs,
+            use_lmdb_data=False,
+            )
+
+        ####################################
+        ############## UNET ################
+        ####################################
+        print()
+        print('\n BUILDING UNET')
+        if conf.unet.model == 'unet':
+            unet = UNet(
+                n_blocks=conf.unet.n_blocks, 
+                n_filters=conf.unet.n_filters, 
+                k_size=conf.unet.k_size, 
+                k_stride=conf.unet.k_stride,
+                dropout=conf.unet.dropout, 
+                regularizer=conf.unet.regularizer
+                )
+        elif conf.unet.model == 'se-unet':
+            unet = SEUNet(
+                n_blocks=conf.unet.n_blocks, 
+                n_filters=conf.unet.n_filters, 
+                k_size=conf.unet.k_size, 
+                k_stride=conf.unet.k_stride,
+                squeeze_factor=conf.unet.squeeze_factor,
+                dropout=conf.unet.dropout, 
+                regularizer=conf.unet.regularizer
+                )
+        elif conf.unet.model == 'eca-unet':
+            unet = ECAUNet(
+                n_blocks=conf.unet.n_blocks, 
+                n_filters=conf.unet.n_filters, 
+                k_size=conf.unet.k_size, 
+                k_stride=conf.unet.k_stride,
+                dropout=conf.unet.dropout, 
+                regularizer=conf.unet.regularizer
+                )
+        elif conf.unet.model == 'attention-unet':
+            unet = AttentionUNet(
+                n_blocks=conf.unet.n_blocks, 
+                n_filters=conf.unet.n_filters, 
+                k_size=conf.unet.k_size, 
+                k_stride=conf.unet.k_stride,
+                dropout=conf.unet.dropout, 
+                regularizer=conf.unet.regularizer
+                )
+        elif conf.unet.model == 'moe-unet':
+            unet = MoUNets(
+                n_blocks=conf.unet.n_blocks, 
+                n_filters=conf.unet.n_filters, 
+                k_size=conf.unet.k_size,
+                k_stride=conf.unet.k_stride,
+                dropout=conf.unet.dropout, 
+                regularizer=conf.unet.regularizer,
+                n_experts=conf.unet.moe_n_experts,
+                keep_top_k=conf.unet.moe_top_k_experts,
+                add_noise=conf.unet.moe_noise,
+                balance_loss=conf.unet.moe_balance_loss,
+                )
+        else:
+            raise ValueError(f'UNet model must be one of ["unet", "se-unet", "eca-unet", "attention-unet", "moe-unet"]. \
+                Received {conf.unet.model}.')
+        
+        
+        # loss = FramedFocalCrossentropy3D(exclude_border, input_shape, gamma=3, alpha=None, from_logits=True)
+        loss = FramedCrossentropy3D(conf.unet.exclude_border, conf.unet.input_shape, from_logits=True)
+        # loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+        optimizer = tf.keras.optimizers.Adam(conf.unet.learning_rate)
+
+        unet.build((None, None, None, None, 1))
+        unet.compile(loss=loss, optimizer=optimizer)
+        unet.summary()
+
+        MC_callback = tf.keras.callbacks.ModelCheckpoint(
+            f"{conf.unet.checkpoint_dir}/model.tf",
+            save_best_only=True,
+            save_format='tf',
+            save_freq="epoch",
+            monitor="loss",
+            mode="min",
+            verbose=1,
         )
 
-    ####################################
-    ############## UNET ################
-    ####################################
-    print()
-    print('\n BUILDING UNET')
-    if conf.unet.model == 'unet':
-        unet = UNet(
-            n_blocks=conf.unet.n_blocks, 
-            n_filters=conf.unet.n_filters, 
-            k_size=conf.unet.k_size, 
-            k_stride=conf.unet.k_stride,
-            dropout=conf.unet.dropout, 
-            regularizer=conf.unet.regularizer
-            )
-    elif conf.unet.model == 'se-unet':
-        unet = SEUNet(
-            n_blocks=conf.unet.n_blocks, 
-            n_filters=conf.unet.n_filters, 
-            k_size=conf.unet.k_size, 
-            k_stride=conf.unet.k_stride,
-            squeeze_factor=conf.unet.squeeze_factor,
-            dropout=conf.unet.dropout, 
-            regularizer=conf.unet.regularizer
-            )
-    elif conf.unet.model == 'eca-unet':
-        unet = ECAUNet(
-            n_blocks=conf.unet.n_blocks, 
-            n_filters=conf.unet.n_filters, 
-            k_size=conf.unet.k_size, 
-            k_stride=conf.unet.k_stride,
-            dropout=conf.unet.dropout, 
-            regularizer=conf.unet.regularizer
-            )
-    elif conf.unet.model == 'attention-unet':
-        unet = AttentionUNet(
-            n_blocks=conf.unet.n_blocks, 
-            n_filters=conf.unet.n_filters, 
-            k_size=conf.unet.k_size, 
-            k_stride=conf.unet.k_stride,
-            dropout=conf.unet.dropout, 
-            regularizer=conf.unet.regularizer
-            )
-    elif conf.unet.model == 'moe-unet':
-        unet = MoUNets(
-            n_blocks=conf.unet.n_blocks, 
-            n_filters=conf.unet.n_filters, 
-            k_size=conf.unet.k_size, 
-            k_stride=conf.unet.k_stride,
-            dropout=conf.unet.dropout, 
-            regularizer=conf.unet.regularizer,
-            n_experts=conf.unet.moe_n_experts,
-            keep_top_k=conf.unet.moe_top_k_experts,
-            add_noise=conf.unet.moe_noise,
-            balance_loss=conf.unet.moe_balance_loss,
-            )
-    else:
-        raise ValueError(f'UNet model must be one of ["unet", "se-unet", "eca-unet", "attention-unet", "moe-unet"]. \
-            Received {conf.unet.model}.')
-    
-    
-    # loss = FramedFocalCrossentropy3D(exclude_border, input_shape, gamma=3, alpha=None, from_logits=True)
-    loss = FramedCrossentropy3D(conf.unet.exclude_border, conf.unet.input_shape, from_logits=True)
-    # loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-    optimizer = tf.keras.optimizers.Adam(conf.unet.learning_rate)
+        TB_callback = tf.keras.callbacks.TensorBoard(
+            conf.unet.tensorboard_dir,
+            update_freq="epoch",
+            profile_batch=0,
+        )
 
-    unet.build((None, None, None, None, 1))
-    unet.compile(loss=loss, optimizer=optimizer)
-    unet.summary()
-
-    MC_callback = tf.keras.callbacks.ModelCheckpoint(
-        f"{conf.unet.checkpoint_dir}/model.tf",
-        save_best_only=True,
-        save_format='tf',
-        save_freq="epoch",
-        monitor="loss",
-        mode="min",
-        verbose=1,
-    )
-
-    TB_callback = tf.keras.callbacks.TensorBoard(
-        conf.unet.tensorboard_dir,
-        update_freq="epoch",
-        profile_batch=0,
-    )
-
-    unet.fit(
-        data,
-        epochs=conf.unet.epochs,
-        callbacks=[MC_callback, TB_callback],
-        validation_data=None,
-        verbose=1,
-    )
+        unet.fit(
+            data,
+            epochs=conf.unet.epochs,
+            callbacks=[MC_callback, TB_callback],
+            validation_data=None,
+            verbose=1,
+        )
+        del unet
 
     ####################################
     ############ LOAD UNET #############
     ####################################
-    del unet
-
-    # Load UNet and weights
     unet = tf.keras.models.load_model(f"{conf.unet.checkpoint_dir}/model.tf")
     unet.build((None, None, None, None, 1))
     
     ####################################
     ############ DOG DATA ##############
     ####################################
+    
+    # Create DoG checkpoint dir
+    if not os.path.isdir(conf.dog.checkpoint_dir):
+        os.makedirs(conf.dog.checkpoint_dir, exist_ok=True)
+
     print("\n LOADING DoG DATA")
-
-    Y = []
-    for marker_file in marker_list:
-        print(f"Loading file {marker_file}")
-        y = get_gt_as_numpy(marker_file)
-        Y.append(y)
-
+    
+    # UNet predictions
     print(f"Saving U-Net predictions in {conf.exp.basepath}/Train_pred_lmdb")
+    
     n = len(marker_list)
     nbytes = np.prod(conf.data.shape) * 1 # 4 bytes for float32: 1 byte for uint8
     db = lmdb.open(f'{conf.exp.basepath}/Train_pred_lmdb', map_size=n*nbytes*10)
-
+    
     with db.begin(write=True) as fx:
-        for i, tiff_file in tiff_list:
+        for i, tiff_file in enumerate(tiff_list):
             print(f"Unet prediction on file {i+1}/{len(marker_list)}")
             
             x = get_input_tf(tiff_file)    
-            pred = predict(x).numpy()
+            pred = predict(x, unet).numpy()
             pred = (pred * 255).astype('uint8')
 
             fname = tiff_file.split('/')[-1]
             fx.put(key=fname.encode(), value=pickle.dumps(pred))
     
     db.close()
+
+    # True cell coordinates
+    Y = []
+    for marker_file in marker_list:
+        print(f"Loading file {marker_file}")
+        y = get_gt_as_numpy(marker_file)
+        Y.append(y)
+
     ####################################
     ############### DOG ################
     ####################################
