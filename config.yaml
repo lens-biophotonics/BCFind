@@ -45,8 +45,8 @@ UNet:
     learning_rate     : 0.01
     n_blocks          : 4
     n_filters         : 32
-    k_size            : [3, 5, 5]
-    k_stride          : [2, 2, 2]
+    k_size            : !!python/tuple [3, 5, 5]
+    k_stride          : !!python/tuple [2, 2, 2]
     dropout           : null
     regularizer       : {'l1': 0.003}
     squeeze_factor    : 2
