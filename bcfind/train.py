@@ -1,6 +1,5 @@
 import os
 import lmdb
-import json
 import pickle
 import shutil
 import argparse
@@ -8,14 +7,13 @@ import argparse
 import numpy as np
 import tensorflow as tf
 
-from numba import cuda
-
 from bcfind.config_manager import Configuration
 from bcfind.data.artificial_targets import get_gt_as_numpy
 from bcfind.models import UNet, SEUNet, ECAUNet, AttentionUNet, MoUNets, predict
 from bcfind.localizers.blob_dog import BlobDoG
 from bcfind.losses import FramedCrossentropy3D
 from bcfind.data import TrainingDataset, get_input_tf
+from bcfind.metrics import Precision, Recall, F1
 
 
 def parse_args():
@@ -27,8 +25,9 @@ def parse_args():
         ),
     )
     parser.add_argument("config", type=str, help="YAML Configuration file")
-    parser.add_argument('--gpu', type=int, default=-1, help='Index of GPU to use. Default to -1')
+    parser.add_argument('--gpu', type=int, default=-1, help='Index of GPU to use')
     parser.add_argument('--only-dog', default=False, action='store_true', help='Skip UNet training and train only the DoG')
+    parser.add_argument('--test-as-val', default=False, action='store_true', help='Test set will be used as validation during training. No early stopping will be however applied')
     return parser.parse_args()
 
 
@@ -41,8 +40,13 @@ def main():
 
     conf = Configuration(args.config)
 
-    tiff_list = sorted([f'{conf.data.train_tif_dir}/{fname}' for fname in os.listdir(conf.data.train_tif_dir)])
-    marker_list = sorted([f'{conf.data.train_gt_dir}/{fname}.marker' for fname in os.listdir(conf.data.train_tif_dir)])
+    train_fnames = os.listdir(conf.data.train_tif_dir)
+    train_tiff_files = sorted([f'{conf.data.train_tif_dir}/{fname}' for fname in train_fnames])
+    train_marker_files = sorted([f'{conf.data.train_gt_dir}/{fname}.marker' for fname in train_fnames])
+    
+    test_fnames = os.listdir(conf.data.test_tif_dir)
+    test_tiff_files = sorted([f'{conf.data.test_tif_dir}/{fname}' for fname in test_fnames])
+    test_marker_files = sorted([f'{conf.data.test_gt_dir}/{fname}.marker' for fname in test_fnames])
 
     if not args.only_dog:
         ######################################
@@ -69,9 +73,9 @@ def main():
         ####################################
         print('\n LOADING UNET DATA')
         
-        data = TrainingDataset(
-            tiff_list=tiff_list, 
-            marker_list=marker_list, 
+        train_data = TrainingDataset(
+            tiff_list=train_tiff_files, 
+            marker_list=train_marker_files, 
             batch_size=conf.unet.batch_size, 
             dim_resolution=conf.data.dim_resolution, 
             output_shape=conf.unet.input_shape, 
@@ -79,6 +83,20 @@ def main():
             augmentations_prob=conf.data_aug.op_probs,
             use_lmdb_data=False,
             )
+        test_data = None
+        
+        if args.test_as_val:
+            print('ATTN!! Loading test-set to use as validation')
+            test_data = TrainingDataset(
+                tiff_list=test_tiff_files, 
+                marker_list=test_marker_files, 
+                batch_size=conf.unet.batch_size, 
+                dim_resolution=conf.data.dim_resolution, 
+                output_shape=conf.unet.input_shape, 
+                augmentations=None, 
+                augmentations_prob=None,
+                use_lmdb_data=False,
+                )
 
         ####################################
         ############## UNET ################
@@ -142,11 +160,15 @@ def main():
         
         # loss = FramedFocalCrossentropy3D(exclude_border, input_shape, gamma=3, alpha=None, from_logits=True)
         loss = FramedCrossentropy3D(conf.unet.exclude_border, conf.unet.input_shape, from_logits=True)
-        # loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+        
+        prec = Precision(.036, conf.unet.input_shape, conf.unet.exclude_border, from_logits=True)
+        rec = Recall(.036, conf.unet.input_shape, conf.unet.exclude_border, from_logits=True)
+        f1 = F1(.036, conf.unet.input_shape, conf.unet.exclude_border, from_logits=True)
+
         optimizer = tf.keras.optimizers.Adam(conf.unet.learning_rate)
 
         unet.build((None, None, None, None, 1))
-        unet.compile(loss=loss, optimizer=optimizer)
+        unet.compile(loss=loss, optimizer=optimizer, metrics=[prec, rec, f1])
         unet.summary()
 
         MC_callback = tf.keras.callbacks.ModelCheckpoint(
@@ -166,10 +188,10 @@ def main():
         )
 
         unet.fit(
-            data,
+            train_data,
             epochs=conf.unet.epochs,
             callbacks=[MC_callback, TB_callback],
-            validation_data=None,
+            validation_data=test_data,
             verbose=1,
         )
         del unet
@@ -193,13 +215,13 @@ def main():
     # UNet predictions
     print(f"Saving U-Net predictions in {conf.exp.basepath}/Train_pred_lmdb")
     
-    n = len(marker_list)
+    n = len(train_tiff_files)
     nbytes = np.prod(conf.data.shape) * 1 # 4 bytes for float32: 1 byte for uint8
     db = lmdb.open(f'{conf.exp.basepath}/Train_pred_lmdb', map_size=n*nbytes*10)
     
     with db.begin(write=True) as fx:
-        for i, tiff_file in enumerate(tiff_list):
-            print(f"Unet prediction on file {i+1}/{len(marker_list)}")
+        for i, tiff_file in enumerate(train_tiff_files):
+            print(f"Unet prediction on file {i+1}/{len(train_tiff_files)}")
             
             x = get_input_tf(tiff_file)    
             pred = predict(x, unet).numpy()
@@ -212,7 +234,7 @@ def main():
 
     # True cell coordinates
     Y = []
-    for marker_file in marker_list:
+    for marker_file in train_marker_files:
         print(f"Loading file {marker_file}")
         y = get_gt_as_numpy(marker_file)
         Y.append(y)
