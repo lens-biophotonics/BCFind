@@ -11,180 +11,16 @@ import concurrent.futures as cf
 import cucim.skimage.filters as cm_skim_filt
 import cucim.skimage.feature as cm_skim_feat
 
-from scipy import spatial
+from skimage.feature.blob import _prune_blobs
 
 from bcfind.localizers import bipartite_match
 from bcfind.localizers.utils import get_counts_from_bm_eval
 from bcfind.utils import metrics, remove_border_points_from_array, remove_border_points_from_df
 
 
-
 mempool = cp.get_default_memory_pool()
 pinned_mempool = cp.get_default_pinned_memory_pool()
 
-
-def _compute_disk_overlap(d, r1, r2):
-    """
-    Compute fraction of surface overlap between two disks of radii
-    ``r1`` and ``r2``, with centers separated by a distance ``d``.
-    Parameters
-    ----------
-    d : float
-        Distance between centers.
-    r1 : float
-        Radius of the first disk.
-    r2 : float
-        Radius of the second disk.
-    Returns
-    -------
-    fraction: float
-        Fraction of area of the overlap between the two disks.
-    """
-
-    ratio1 = (d ** 2 + r1 ** 2 - r2 ** 2) / (2 * d * r1)
-    ratio1 = np.clip(ratio1, -1, 1)
-    acos1 = np.arcsin(ratio1)
-
-    ratio2 = (d ** 2 + r2 ** 2 - r1 ** 2) / (2 * d * r2)
-    ratio2 = np.clip(ratio2, -1, 1)
-    acos2 = np.arcsin(ratio2)
-
-    a = -d + r2 + r1
-    b = d - r2 + r1
-    c = d + r2 - r1
-    d = d + r2 + r1
-    area = (r1 ** 2 * acos1 + r2 ** 2 * acos2 -
-            0.5 * np.sqrt(abs(a * b * c * d)))
-    return area / (np.pi * (min(r1, r2) ** 2))
-
-
-def _compute_sphere_overlap(d, r1, r2):
-    """
-    Compute volume overlap fraction between two spheres of radii
-    ``r1`` and ``r2``, with centers separated by a distance ``d``.
-    Parameters
-    ----------
-    d : float
-        Distance between centers.
-    r1 : float
-        Radius of the first sphere.
-    r2 : float
-        Radius of the second sphere.
-    Returns
-    -------
-    fraction: float
-        Fraction of volume of the overlap between the two spheres.
-    Notes
-    -----
-    See for example http://mathworld.wolfram.com/Sphere-SphereIntersection.html
-    for more details.
-    """
-    vol = (np.pi / (12 * d) * (r1 + r2 - d)**2 *
-           (d**2 + 2 * d * (r1 + r2) - 3 * (r1**2 + r2**2) + 6 * r1 * r2))
-    return vol / (4./3 * np.pi * min(r1, r2) ** 3)
-
-
-def _blob_overlap(blob1, blob2, *, sigma_dim=1):
-    """Finds the overlapping area fraction between two blobs.
-    Returns a float representing fraction of overlapped area. Note that 0.0
-    is *always* returned for dimension greater than 3.
-    Parameters
-    ----------
-    blob1 : sequence of arrays
-        A sequence of ``(row, col, sigma)`` or ``(pln, row, col, sigma)``,
-        where ``row, col`` (or ``(pln, row, col)``) are coordinates
-        of blob and ``sigma`` is the standard deviation of the Gaussian kernel
-        which detected the blob.
-    blob2 : sequence of arrays
-        A sequence of ``(row, col, sigma)`` or ``(pln, row, col, sigma)``,
-        where ``row, col`` (or ``(pln, row, col)``) are coordinates
-        of blob and ``sigma`` is the standard deviation of the Gaussian kernel
-        which detected the blob.
-    sigma_dim : int, optional
-        The dimensionality of the sigma value. Can be 1 or the same as the
-        dimensionality of the blob space (2 or 3).
-    Returns
-    -------
-    f : float
-        Fraction of overlapped area (or volume in 3D).
-    """
-    ndim = len(blob1) - sigma_dim
-    if ndim > 3:
-        return 0.0
-    root_ndim = np.sqrt(ndim)
-
-    # we divide coordinates by sigma * sqrt(ndim) to rescale space to isotropy,
-    # giving spheres of radius = 1 or < 1.
-    if blob1[-1] == blob2[-1] == 0:
-        return 0.0
-    elif blob1[-1] > blob2[-1]:
-        max_sigma = blob1[-sigma_dim:]
-        r1 = 1
-        r2 = blob2[-1] / blob1[-1]
-    else:
-        max_sigma = blob2[-sigma_dim:]
-        r2 = 1
-        r1 = blob1[-1] / blob2[-1]
-    pos1 = blob1[:ndim] / (max_sigma * root_ndim)
-    pos2 = blob2[:ndim] / (max_sigma * root_ndim)
-
-    d = np.sqrt(np.sum((pos2 - pos1)**2))
-    if d > r1 + r2:  # centers farther than sum of radii, so no overlap
-        return 0.0
-
-    # one blob is inside the other
-    if d <= abs(r1 - r2):
-        return 1.0
-
-    if ndim == 2:
-        return _compute_disk_overlap(d, r1, r2)
-
-    else:  # ndim=3 http://mathworld.wolfram.com/Sphere-SphereIntersection.html
-        return _compute_sphere_overlap(d, r1, r2)
-
-
-
-def _prune_blobs(blobs_array, overlap, *, sigma_dim=1):
-    """Eliminates blobs with area overlap.
-    
-    Parameters
-    ----------
-    blobs_array : ndarray
-        A 2d array with each row representing 3 (or 4) values,
-        ``(row, col, sigma)`` or ``(pln, row, col, sigma)`` in 3D,
-        where ``(row, col)`` (``(pln, row, col)``) are coordinates of the blob
-        and ``sigma`` is the standard deviation of the Gaussian kernel which
-        detected the blob.
-        This array must not have a dimension of size 0.
-    overlap : float
-        A value between 0 and 1. If the fraction of area overlapping for 2
-        blobs is greater than `overlap` the smaller blob is eliminated.
-    sigma_dim : int, optional
-        The number of columns in ``blobs_array`` corresponding to sigmas rather
-        than positions.
-    Returns
-    -------
-    A : ndarray
-        `array` with overlapping blobs removed.
-    """
-    sigma = blobs_array[:, -sigma_dim:].max()
-    distance = 2 * sigma * np.sqrt(blobs_array.shape[1] - sigma_dim)
-    tree = spatial.cKDTree(blobs_array[:, :-sigma_dim])
-    pairs = np.array(list(tree.query_pairs(distance)))
-    if len(pairs) == 0:
-        return blobs_array
-    else:
-        for (i, j) in pairs:
-            blob1, blob2 = blobs_array[i], blobs_array[j]
-            if _blob_overlap(blob1, blob2, sigma_dim=sigma_dim) > overlap:
-                # note: this test works even in the anisotropic case because
-                # all sigmas increase together.
-                if blob1[-1] > blob2[-1]:
-                    blob2[-1] = 0
-                else:
-                    blob1[-1] = 0
-
-    return np.stack([b for b in blobs_array if b[-1] > 0])
 
 def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
     r""" Equivalent function to skimage.feature.blob_dog which runs on the GPU, making computation 10 times faster.
@@ -243,11 +79,11 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
     scalar_sigma = np.isscalar(max_sigma) and np.isscalar(min_sigma)
 
     if np.isscalar(min_sigma):
-        min_sigma = np.array([min_sigma] * image.ndim)
+        min_sigma = np.array((min_sigma, ) * image.ndim)
     else:
         min_sigma = np.array(min_sigma)
     if np.isscalar(max_sigma):
-        max_sigma = np.array([max_sigma] * image.ndim)
+        max_sigma = np.array((max_sigma, ) * image.ndim)
     else:
         max_sigma = np.array(max_sigma)
     
@@ -268,7 +104,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
         lm = cm_skim_feat.peak_local_max(
             dog_image,
             threshold_rel=threshold_rel,
-            footprint=np.ones((3,) * (image.ndim)),
+            footprint=cp.ones((3,) * (image.ndim)),
         )
         lm = cp.c_[lm, cp.ones(lm.shape[0]) * i]
         detected_blobs.append(lm)
@@ -305,6 +141,15 @@ class BlobDoG:
     def __init__(self, n_dim=2, dim_resolution=1, exclude_border=None):
         if np.isscalar(dim_resolution):
             dim_resolution = (dim_resolution, ) * n_dim
+        elif dim_resolution is None:
+            dim_resolution = (1, ) * n_dim
+        elif len(dim_resolution) != n_dim:
+            raise ValueError(f'Length of dim_resolution must be = {n_dim}. Found {dim_resolution}')
+        
+        if np.isscalar(exclude_border):
+            exclude_border = (exclude_border, ) * n_dim
+        elif exclude_border is not None and len(exclude_border) != n_dim:
+            raise ValueError(f'Length of exclude_border must be = {n_dim}. Found {exclude_border}')
 
         self.D = n_dim
         self.dim_resolution = np.array(dim_resolution)
@@ -382,14 +227,18 @@ class BlobDoG:
                     threshold_rel=parameters["threshold"],
                 )
 
-        if exclude_border == 'default':
-            centers = remove_border_points_from_array(
-                centers, x.shape, self.exclude_border
-            )
-        elif isinstance(exclude_border, (list, int, float)):
+        if isinstance(exclude_border, (list, tuple, int, float)):
+            if np.isscalar(exclude_border):
+                exclude_border = (exclude_border, ) * self.n_dim
+
             centers = remove_border_points_from_array(
                 centers, x.shape, exclude_border
             )
+        elif exclude_border == 'default':
+            if self.exclude_border is not None:
+                centers = remove_border_points_from_array(
+                    centers, x.shape, self.exclude_border
+                )
         return centers
 
     def evaluate(self, y_pred, y_true, max_match_dist, evaluation_type="complete"):
@@ -580,7 +429,7 @@ class BlobDoG:
             "min_max_rad_diff": ho.hp.uniform("min_max_rad_diff", 1.0, 10.0),
             "sigma_ratio": ho.hp.uniform("sigma_ratio", 1.0, 2.0),
             "overlap": ho.hp.uniform("overlap", 0.0, 1.0),
-            "threshold": ho.hp.uniform("threshold", 0.0, 0.4),
+            "threshold": ho.hp.uniform("threshold", 0.0, 0.15),
         }
 
         best_par = ho.fmin(
