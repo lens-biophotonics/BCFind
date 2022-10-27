@@ -4,10 +4,6 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 
-def normalize(x):
-    return (x - x.min()) / (x.max() - x.min())
-
-
 def get_slice_center_idxs_from_array(centers, sl, slice_width=1, axis=0):
     pts_idx = (centers[:, axis] >= sl - slice_width // 2) & (centers[:, axis] < sl + slice_width // 2)
     return pts_idx
