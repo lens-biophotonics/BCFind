@@ -6,65 +6,12 @@ import numpy as np
 import tensorflow as tf
 import concurrent.futures as cf
 
-from pathlib import Path
-
-from zetastitcher import InputFile
-from bcfind.data.artificial_targets import get_target
-from bcfind.data.augmentation import *
+from bcfind.data.utils import get_input_tf, get_target_tf
+from bcfind.data.augmentation import random_crop_tf, augment
 
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
-
-
-@tf.function(reduce_retracing=True)
-def get_target_tf(marker_file, target_shape, dim_resolution):
-    def get_target_wrap(marker_file, target_shape, dim_resolution):
-        marker_file = Path(marker_file.decode())
-        blobs = get_target(
-            marker_file,
-            target_shape=target_shape, 
-            default_radius=3.5,  # FIXME: not yet configurable!!
-            dim_resolution=dim_resolution,
-        )
-        return blobs.astype(np.float32)
-
-    target = tf.numpy_function(get_target_wrap, [marker_file, target_shape, dim_resolution], tf.float32)
-    return target
-
-
-def normalize_tf(x):
-    x_min = tf.reduce_min(x)
-    x_max = tf.reduce_max(x)
-    new_x = (x - x_min) / (x_max - x_min)
-    return new_x
-
-
-@tf.function(reduce_retracing=True)
-def get_input_tf(input_file):
-    def get_input_wrap(input_file):
-        input_file = Path(input_file.decode())
-        input_image = InputFile(input_file).whole()
-        return input_image.astype(np.float32)
-
-    input = tf.numpy_function(get_input_wrap, [input_file], tf.float32)
-    input = normalize_tf(input)
-    return input
-
-from sklearn.neighbors import LocalOutlierFactor
-@tf.function()
-def auto_clip_tf(x):
-    def auto_clip_wrap(x):
-        lof = LocalOutlierFactor(n_neighbors=50, contamination=0.2)
-        inl_pred = lof.fit_predict(x.reshape(-1, 1))
-        in_max = np.max(x.flatten()[inl_pred > 0.8])
-        in_min = np.max(x.flatten()[inl_pred > 0.8])
-        x[x>in_max] = in_max
-        x[x<in_min] = in_min
-        return x.astype(np.float32)
-
-    x = tf.numpy_function(auto_clip_wrap, [x], tf.float32)
-    return x
 
 
 class TrainingDataset(tf.keras.utils.Sequence):
