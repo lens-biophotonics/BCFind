@@ -1,0 +1,12 @@
+Experiment:
+    name           : 'my_exp'
+    basepath       : '/path/to/experiment/outputs'
+
+VirtualFusedVolume:
+    name             : 'vfv_name'
+    config_file      : '/path/to/vfv/stitch.yml'
+    dim_resolution   : [2., .65, .65]
+    patch_shape      : [160, 480, 480]
+    patch_overlap    : [8, 20, 20] # NOTE: it should be at least two times the diameter of the largest cell
+    mask_path        : '/path/to/mask.tiff'
+    outdir           : '/path/to/vfv/predictions/folder'
