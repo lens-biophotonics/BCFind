@@ -40,15 +40,12 @@ def bipartite_match(true_centers, pred_centers, max_match_dist, dim_resolution=1
     scaled_pred = pred_centers * dim_resolution
 
     dist = sp.spatial.distance.cdist(scaled_true, scaled_pred, metric='euclidean')
-    dist[dist >= max_match_dist] = 1e6
-    dist = np.where(dist > 0.001, 1/dist, 1/0.001)
+    dist[dist >= max_match_dist] = 1e9
 
-    true_idxs, pred_idxs = sp.optimize.linear_sum_assignment(dist, maximize=True)
+    true_idxs, pred_idxs = sp.optimize.linear_sum_assignment(dist, maximize=False)
 
-    print(np.any([idx in set(pred_idxs) - set([idx]) for idx in pred_idxs]))
-
-    pred_TP = [pred_idxs[i] for i in range(len(true_idxs)) if dist[true_idxs[i], pred_idxs[i]] > 1 / max_match_dist]
-    true_TP = [true_idxs[i] for i in range(len(true_idxs)) if dist[true_idxs[i], pred_idxs[i]] > 1 / max_match_dist]
+    pred_TP = [pred_idxs[i] for i in range(len(true_idxs)) if dist[true_idxs[i], pred_idxs[i]] < max_match_dist]
+    true_TP = [true_idxs[i] for i in range(len(true_idxs)) if dist[true_idxs[i], pred_idxs[i]] < max_match_dist]
     FP = [idx for idx in range(pred_centers.shape[0]) if idx not in pred_TP]
     FN = [idx for idx in range(true_centers.shape[0]) if idx not in true_TP]
 
