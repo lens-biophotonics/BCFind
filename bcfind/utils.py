@@ -81,20 +81,20 @@ def preprocessing(
 
 
 def remove_border_points_from_df(df, df_columns, data_shape, border_size):
-    df = df.drop(df[df[df_columns[0]] <= border_size[0]].index)
+    df = df.drop(df[df[df_columns[0]] < border_size[0]].index)
     df = df.drop(df[df[df_columns[0]] >= data_shape[0] - border_size[0]].index)
-    df = df.drop(df[df[df_columns[1]] <= border_size[1]].index)
+    df = df.drop(df[df[df_columns[1]] < border_size[1]].index)
     df = df.drop(df[df[df_columns[1]] >= data_shape[1] - border_size[1]].index)
-    df = df.drop(df[df[df_columns[2]] <= border_size[2]].index)
+    df = df.drop(df[df[df_columns[2]] < border_size[2]].index)
     df = df.drop(df[df[df_columns[2]] >= data_shape[2] - border_size[2]].index)
     return df
 
 
 def remove_border_points_from_array(array, data_shape, border_size):
     frame_centers = np.where(
-        (array[:, 0] <= border_size[0])
-        + (array[:, 1] <= border_size[1])
-        + (array[:, 2] <= border_size[2])
+        (array[:, 0] < border_size[0])
+        + (array[:, 1] < border_size[1])
+        + (array[:, 2] < border_size[2])
         + (array[:, 0] >= data_shape[0] - border_size[0])
         + (array[:, 1] >= data_shape[1] - border_size[1])
         + (array[:, 2] >= data_shape[2] - border_size[2])
