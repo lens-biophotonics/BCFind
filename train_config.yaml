@@ -5,9 +5,11 @@ Dataset:
     dim_resolution : [2., .65, .65]
     cell_radius    : [3, 9, 9] # in pixels, for border exclusion
 
+
 Experiment:
     name           : 'my_exp'
     basepath       : '/path/to/experiment/outputs'
+
 
 UNet:
     model             : 'unet' # can be one of ['unet', 'se-unet', 'eca-unet', 'attention-unet', 'moe-unet']
@@ -20,17 +22,29 @@ UNet:
     k_size            : !!python/tuple [3, 5, 5]
     k_stride          : !!python/tuple [2, 2, 2]
     dropout           : 0.1
-    regularizer       : {'l1': 0.0003}
+    regularizer       : {'l2': 0.0001}
+    
     squeeze_factor    : 2       # only used if model == 'se-unet'
     moe_n_experts     : 5       # only used if model == 'moe-unet'
     moe_top_k_experts : null    # only used if model == 'moe-unet'
     moe_noise         : true    # only used if model == 'moe-unet'
     moe_balance_loss  : 'load'  # only used if model == 'moe-unet'
 
+
 DoG:
     iterations     : 40
-    max_match_dist : 10 # same scale as given by dim_resolution
+    max_match_dist : 10  # same scale as given by dim_resolution
     n_cpu          : 5
+
+
+PreProcessing:
+    clip         : 'constant'  # can be one of ['quantile', 'bit', 'constant', 'auto', 'none']
+    clip_value   : 16384
+    center       : 'none'   # cane be one of ['min', 'constant', 'mean', 'none']
+    center_value : null
+    scale        : 'constant'  # can be one of ['max', 'constant', 'std']
+    scale_value  : 16384
+
 
 DataAugmentation:
     augment             : false

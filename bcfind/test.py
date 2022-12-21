@@ -7,8 +7,10 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from bcfind.config_manager import Configuration
-from bcfind.data.artificial_targets import get_gt_as_numpy
+from  numba import cuda
+
+from bcfind.config_manager import TrainConfiguration
+from bcfind.data.utils import get_gt_as_numpy
 from bcfind.localizers import BlobDoG
 from bcfind.utils import metrics
 from bcfind.data import get_input_tf
@@ -42,7 +44,7 @@ def main():
     tf.config.set_visible_devices(gpus[args.gpu], 'GPU')
     tf.config.experimental.set_memory_growth(gpus[args.gpu], True)
 
-    conf = Configuration(args.config)
+    conf = TrainConfiguration(args.config)
     
     marker_list = sorted([f'{conf.data.test_gt_dir}/{fname}.marker' for fname in os.listdir(conf.data.test_tif_dir)])
     tiff_list = sorted([f'{conf.data.test_tif_dir}/{fname}' for fname in os.listdir(conf.data.test_tif_dir)])
@@ -75,7 +77,7 @@ def main():
         for i, tiff_file in enumerate(tiff_list):
             print(f"Unet prediction on file {i+1}/{len(tiff_list)}")
             
-            x = get_input_tf(tiff_file)
+            x = get_input_tf(tiff_file, **conf.preproc)
             pred = predict(x, unet).numpy()
             pred = (pred * 255).astype('uint8')
 
@@ -83,7 +85,8 @@ def main():
             fx.put(key=fname.encode(), value=pickle.dumps(pred))
 
     db.close()
-
+    cuda.close()
+    
     ##########################################
     ############ DOG PREDICTIONS #############
     ##########################################

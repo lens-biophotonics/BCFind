@@ -7,6 +7,16 @@ VirtualFusedVolume:
     config_file      : '/path/to/vfv/stitch.yml'
     dim_resolution   : [2., .65, .65]
     patch_shape      : [160, 480, 480]
-    patch_overlap    : [8, 20, 20] # NOTE: it should be at least two times the diameter of the largest cell
+    patch_overlap    : [8, 20, 20]  # NOTE: it should be at least two times the diameter of the largest cell
     mask_path        : '/path/to/mask.tiff'
     outdir           : '/path/to/vfv/predictions/folder'
+
+
+# Attn! Should be identical to the training phase! Be aware of any differences: check training config file!
+PreProcessing:
+    clip         : 'bit'  # can be one of ['quantile', 'bit', 'constant', 'auto', 'none']
+    clip_value   : 14
+    center       : null   # cane be one of ['min', 'constant', 'mean', 'none']
+    center_value : null
+    scale        : 'max'  # can be one of ['max', 'constant', 'std']
+    scale_value  : null

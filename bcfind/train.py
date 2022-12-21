@@ -7,7 +7,9 @@ import argparse
 import numpy as np
 import tensorflow as tf
 
-from bcfind.config_manager import Configuration
+from numba import cuda
+
+from bcfind.config_manager import TrainConfiguration
 from bcfind.data.artificial_targets import get_gt_as_numpy
 from bcfind.models import UNet, SEUNet, ECAUNet, AttentionUNet, MoUNets, predict
 from bcfind.localizers.blob_dog import BlobDoG
@@ -26,6 +28,7 @@ def parse_args():
     )
     parser.add_argument("config", type=str, help="YAML Configuration file")
     parser.add_argument('--gpu', type=int, default=-1, help='Index of GPU to use')
+    parser.add_argument('--lmdb', default=False, action='store_true', help='In case of huge dataset store it as lmdb to save RAM usage')
     parser.add_argument('--only-dog', default=False, action='store_true', help='Skip UNet training and train only the DoG')
     parser.add_argument('--test-as-val', default=False, action='store_true', help='Test set will be used as validation during training. No early stopping will be however applied')
     return parser.parse_args()
@@ -38,7 +41,7 @@ def main():
     tf.config.set_visible_devices(gpus[args.gpu], 'GPU')
     tf.config.experimental.set_memory_growth(gpus[args.gpu], True)
 
-    conf = Configuration(args.config)
+    conf = TrainConfiguration(args.config)
 
     train_fnames = os.listdir(conf.data.train_tif_dir)
     train_tiff_files = sorted([f'{conf.data.train_tif_dir}/{fname}' for fname in train_fnames])
@@ -81,7 +84,8 @@ def main():
             output_shape=conf.unet.input_shape, 
             augmentations=conf.data_aug.op_args, 
             augmentations_prob=conf.data_aug.op_probs,
-            use_lmdb_data=False,
+            use_lmdb_data=args.lmdb,
+            **conf.preproc
             )
         test_data = None
         
@@ -95,7 +99,7 @@ def main():
                 output_shape=conf.unet.input_shape, 
                 augmentations=None, 
                 augmentations_prob=None,
-                use_lmdb_data=False,
+                use_lmdb_data=args.lmdb,
                 )
 
         ####################################
@@ -208,7 +212,7 @@ def main():
     
     # Create DoG checkpoint dir
     if not os.path.isdir(conf.dog.checkpoint_dir):
-        os.makedirs(conf.dog.checkpoint_dir, exist_ok=True)
+        os.makedirs(conf.dog.checkpoint_dir)
 
     print("\n LOADING DoG DATA")
     
@@ -223,7 +227,7 @@ def main():
         for i, tiff_file in enumerate(train_tiff_files):
             print(f"Unet prediction on file {i+1}/{len(train_tiff_files)}")
             
-            x = get_input_tf(tiff_file)    
+            x = get_input_tf(tiff_file, **conf.preproc)    
             pred = predict(x, unet).numpy()
             pred = (pred * 255).astype('uint8')
 
@@ -231,6 +235,7 @@ def main():
             fx.put(key=fname.encode(), value=pickle.dumps(pred))
     
     db.close()
+    cuda.close()
 
     # True cell coordinates
     Y = []

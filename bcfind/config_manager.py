@@ -9,7 +9,7 @@ class AttrDict(dict):
         self.__dict__ = self
 
 
-class Configuration:
+class TrainConfiguration:
     def __init__(self, yaml_file):
         with open(yaml_file) as f:
             conf = yaml.load(f, Loader=yaml.FullLoader)
@@ -18,9 +18,9 @@ class Configuration:
             'Dataset': 'data',
             'Experiment': 'exp',
             'DataAugmentation': 'data_aug',
+            'PreProcessing': 'preproc',
             'UNet': 'unet',
             'DoG': 'dog',
-            'VirtualFusedVolume': 'vfv',
         }
         for k, v in yaml_key_to_attr.items():
             try:
@@ -56,6 +56,10 @@ class Configuration:
             self.data_aug.op_probs = None
 
         # UNet
+        self.unet.checkpoint_dir = f"{self.exp.basepath}/UNet_checkpoints"
+        self.unet.tensorboard_dir = f"{self.exp.basepath}/UNet_tensorboard"
+        self.unet.exclude_border = self.data.cell_radius
+
         if isinstance(self.unet.regularizer, dict):
             if len(self.unet.regularizer) > 1:
                 raise ValueError(f'''
@@ -73,15 +77,41 @@ class Configuration:
                 Dictionary keys for UNet regularizer must be one of ['l1', 'l2'].
                 Got instead {key}
                 ''')
-            
+
+        # DoG
+        self.dog.exclude_border = np.array(self.data.cell_radius) * 2
+
+        self.dog.checkpoint_dir = f"{self.exp.basepath}/DoG_checkpoints"
+        self.dog.predictions_dir = f"{self.exp.basepath}/{self.data.name}_predictions"
+
+
+class VFVConfiguration:
+    def __init__(self, yaml_file):
+        with open(yaml_file) as f:
+            conf = yaml.load(f, Loader=yaml.FullLoader)
+
+        yaml_key_to_attr = {
+            'Experiment': 'exp',
+            'VirtualFusedVolume': 'vfv',
+            'PreProcessing': 'preproc'
+        }
+        for k, v in yaml_key_to_attr.items():
+            try:
+                setattr(self, v, AttrDict(conf[k]))
+            except KeyError:
+                pass
+
+        # Experiment
+        self.exp.basepath = f"{self.exp.basepath}/{self.exp.name}"
+
+        # UNet
+        self.unet = AttrDict()
         self.unet.checkpoint_dir = f"{self.exp.basepath}/UNet_checkpoints"
         self.unet.tensorboard_dir = f"{self.exp.basepath}/UNet_tensorboard"
 
         # DoG
-        self.dog.exclude_border = np.array(self.unet.exclude_border) + self.dog.exclude_border
-
+        self.dog = AttrDict()
         self.dog.checkpoint_dir = f"{self.exp.basepath}/DoG_checkpoints"
-        self.dog.predictions_dir = f"{self.exp.basepath}/{self.data.name}_predictions"
 
         # VirtualFusedVolume
         self.vfv.patch_shape = np.array(self.vfv.patch_shape)
@@ -92,5 +122,5 @@ class Configuration:
 
 
 if __name__ == "__main__":
-    args = Configuration("/home/checcucci/Python/BCFind/config.yaml")
-    print(args.data_aug.op_args)
+    args = VFVConfiguration("/home/curzio/Python/Projects/BCFind/vfv_config.yaml")
+    print(args.preproc.center not in ['none', None])
