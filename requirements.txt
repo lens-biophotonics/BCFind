@@ -24,8 +24,6 @@ certifi==2022.5.18.1
     # via requests
 charset-normalizer==2.0.12
     # via requests
-click==8.1.3
-    # via cucim
 cliff==4.0.0
     # via optuna
 cloudpickle==2.1.0
@@ -42,20 +40,18 @@ colorlog==6.7.0
     # via optuna
 contourpy==1.0.5
     # via matplotlib
-cucim==22.6.0
-    # via -r requirements.in
-cupy-cuda112[all]==10.6.0
+cupy-cuda11x[all]==11.2.0
     # via -r requirements.in
 cvxpy==1.2.1
     # via zetastitcher
 cycler==0.11.0
     # via matplotlib
 cython==0.29.32
-    # via cupy-cuda112
+    # via cupy-cuda11x
 ecos==2.0.10
     # via cvxpy
 fastrlock==0.8
-    # via cupy-cuda112
+    # via cupy-cuda11x
 flatbuffers==1.12
     # via tensorflow
 fonttools==4.38.0
@@ -135,8 +131,7 @@ numpy==1.22.4
     # via
     #   cmaes
     #   contourpy
-    #   cucim
-    #   cupy-cuda112
+    #   cupy-cuda11x
     #   cvxpy
     #   ecos
     #   h5py
@@ -172,7 +167,7 @@ opencv-python==4.6.0.66
 opt-einsum==3.3.0
     # via tensorflow
 optuna==3.0.3
-    # via cupy-cuda112
+    # via cupy-cuda11x
 osqp==0.6.2.post5
     # via cvxpy
 packaging==21.3
@@ -254,7 +249,7 @@ scikit-learn==1.1.2
 scipy==1.8.1
     # via
     #   -r requirements.in
-    #   cupy-cuda112
+    #   cupy-cuda11x
     #   cvxpy
     #   ecos
     #   hyperopt
