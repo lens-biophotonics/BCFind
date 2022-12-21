@@ -8,18 +8,31 @@ import pandas as pd
 import hyperopt as ho
 import functools as ft
 import concurrent.futures as cf
-import cucim.skimage.filters as cm_skim_filt
-import cucim.skimage.feature as cm_skim_feat
 
+from cupyx.scipy import ndimage as cpx_img
 from skimage.feature.blob import _prune_blobs
 
 from bcfind.localizers import bipartite_match
 from bcfind.localizers.utils import get_counts_from_bm_eval
 from bcfind.utils import metrics, remove_border_points_from_array, remove_border_points_from_df
 
+# # Disable memory pool for device memory (GPU)
+# cp.cuda.set_allocator(None)
+# # Disable memory pool for pinned memory (CPU).
+# cp.cuda.set_pinned_memory_allocator(None)
 
-mempool = cp.get_default_memory_pool()
-pinned_mempool = cp.get_default_pinned_memory_pool()
+
+def cp_peak_local_max(image, threshold_rel=0., footprint=None):
+    if footprint is None:
+        footprint = cp.ones((3, ) * image.ndim)
+
+    maxima = (image == cpx_img.maximum_filter(image, footprint=footprint, mode='constant', cval=0.0))
+
+    thresh = cp.max(image) * threshold_rel
+    maxima = cp.logical_and(maxima, image >= thresh)
+
+    peaks = cp.transpose(cp.array(cp.where(maxima)))
+    return peaks
 
 
 def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
@@ -93,32 +106,28 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
     # a geometric progression of standard deviations for gaussian kernels
     sigma_list = np.array([min_sigma * (sigma_ratio ** i)
                            for i in range(k + 1)])
-    image = cp.asarray(image)
+    gpu_image = cp.asarray(image)
 
-    detected_blobs = []
+    gpu_detected_blobs = []
     for i in range(k):
-        low = cm_skim_filt.gaussian(image, sigma_list[i])
-        high = cm_skim_filt.gaussian(image, sigma_list[i + 1])
+        low = cpx_img.gaussian_filter(gpu_image, sigma_list[i])
+        high = cpx_img.gaussian_filter(gpu_image, sigma_list[i + 1])
         dog_image = (low - high) * cp.mean(sigma_list[i])
         
-        lm = cm_skim_feat.peak_local_max(
+        lm = cp_peak_local_max(
             dog_image,
             threshold_rel=threshold_rel,
             footprint=cp.ones((3,) * (image.ndim)),
         )
         lm = cp.c_[lm, cp.ones(lm.shape[0]) * i]
-        detected_blobs.append(lm)
+        gpu_detected_blobs.append(lm)
     
-    detected_blobs = cp.concatenate(detected_blobs)
-    detected_blobs = cp.asnumpy(detected_blobs).astype("float32")
-
-    # free GPU memory
-    mempool.free_all_blocks()
-    pinned_mempool.free_all_blocks()
+    gpu_detected_blobs = cp.concatenate(gpu_detected_blobs)
+    detected_blobs = cp.asnumpy(gpu_detected_blobs).astype("float32")
 
     # Catch no peaks
     if detected_blobs.size == 0:
-        return np.empty((0, 3))
+        return np.empty((0, image.ndim * 2))
 
     # translate final column of lm, which contains the index of the
     # sigma that produced the maximum intensity value, into the sigma
@@ -204,28 +213,31 @@ class BlobDoG:
         if parameters is None:
             min_sigma = (self.min_rad / self.dim_resolution) / np.sqrt(self.D)
             max_sigma = (self.max_rad / self.dim_resolution) / np.sqrt(self.D)
-
-            centers = blob_dog(
-                x,
-                min_sigma=min_sigma,
-                max_sigma=max_sigma,
-                sigma_ratio=self.sigma_ratio,
-                overlap=self.overlap,
-                threshold_rel=self.threshold,
-            )
+            
+            with cp.cuda.Device(cp.cuda.runtime.getDeviceCount() - 1):
+                with cp.cuda.Stream():
+                    centers = blob_dog(
+                        x,
+                        min_sigma=min_sigma,
+                        max_sigma=max_sigma,
+                        sigma_ratio=self.sigma_ratio,
+                        overlap=self.overlap,
+                        threshold_rel=self.threshold,
+                    )
         else:
             min_sigma = (parameters["min_rad"] / self.dim_resolution) / np.sqrt(self.D)
             max_sigma = (parameters["max_rad"] / self.dim_resolution) / np.sqrt(self.D)
-
+            
             with cp.cuda.Device(cp.cuda.runtime.getDeviceCount() - 1):
-                centers = blob_dog(
-                    x,
-                    min_sigma=min_sigma,
-                    max_sigma=max_sigma,
-                    sigma_ratio=parameters["sigma_ratio"],
-                    overlap=parameters["overlap"],
-                    threshold_rel=parameters["threshold"],
-                )
+                with cp.cuda.Stream():
+                    centers = blob_dog(
+                        x,
+                        min_sigma=min_sigma,
+                        max_sigma=max_sigma,
+                        sigma_ratio=parameters["sigma_ratio"],
+                        overlap=parameters["overlap"],
+                        threshold_rel=parameters["threshold"],
+                    )
 
         if isinstance(exclude_border, (list, tuple, int, float)):
             if np.isscalar(exclude_border):
@@ -277,10 +289,10 @@ class BlobDoG:
         else:
             eval_counts = get_counts_from_bm_eval(labeled_centers)
 
-            if evaluation_type == "counts":
-                return eval_counts
-            else:
-                return metrics(eval_counts)[evaluation_type]
+        if evaluation_type == "counts":
+            return eval_counts
+        else:
+            return metrics(eval_counts)[evaluation_type]
 
     def predict_and_evaluate(
         self, 
@@ -315,13 +327,13 @@ class BlobDoG:
             x = pickle.loads(x)
         
         x = x.astype('float32')
-        
+
         y_pred = self.predict(x, parameters, exclude_border=None)
         # if self.exclude_border is not None:
         #     y_pred = remove_border_points_from_array(y_pred, x.shape, self.exclude_border / 2)
         #     y = remove_border_points_from_array(y, x.shape, self.exclude_border / 2)
         
-        labeled_centers = self.evaluate(y_pred, y, max_match_dist=max_match_dist)
+        labeled_centers = self.evaluate(y_pred[:, :3], y, max_match_dist=max_match_dist)
 
         if self.exclude_border is not None:
             labeled_centers = remove_border_points_from_df(labeled_centers, ['x', 'y', 'z'], x.shape, self.exclude_border)
@@ -425,11 +437,11 @@ class BlobDoG:
 
         # Search space
         search_space = {
-            "min_rad": ho.hp.uniform("min_rad", 2.0, 15.0),
+            "min_rad": ho.hp.uniform("min_rad", 4.0, 15.0),
             "min_max_rad_diff": ho.hp.uniform("min_max_rad_diff", 1.0, 10.0),
-            "sigma_ratio": ho.hp.uniform("sigma_ratio", 1.0, 2.0),
-            "overlap": ho.hp.uniform("overlap", 0.0, 1.0),
-            "threshold": ho.hp.uniform("threshold", 0.0, 0.15),
+            "sigma_ratio": ho.hp.uniform("sigma_ratio", 1.1, 2.0),
+            "overlap": ho.hp.uniform("overlap", 0.05, 0.5),
+            "threshold": ho.hp.uniform("threshold", 0.05, 0.5),
         }
 
         best_par = ho.fmin(
