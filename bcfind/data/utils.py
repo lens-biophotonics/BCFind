@@ -2,14 +2,13 @@ import os
 import json
 import numpy as np
 import pandas as pd
+import functools as ft
 import tensorflow as tf
 
 from pathlib import Path
 from sklearn.neighbors import LocalOutlierFactor
 
 from zetastitcher import InputFile
-
-from bcfind.data.artificial_targets import get_target
 
 
 def vaa3d_to_numpy(marker_path):
@@ -61,36 +60,58 @@ def auto_clip(x):
     return new_x.astype(np.float32)
 
 
-def preprocess(x):
-    new_x = windsor_clip(x, quantile=99)
-    # new_x = bit_clip(new_x, bit=14)
-    # new_x = auto_clip(new_x)
-    return new_x / new_x.max()
+def get_preprocess_func(clip='quantile', clip_value=99, center='min', center_value=None, scale='max', scale_value=None):
+    if clip not in ['constant', 'quantile', 'bit', 'auto', 'none', None]:
+        raise ValueError(f'clip argument must be on of "constant", "quantile", "bit" or "auto", "none" or None. Got {clip}')
+    if center not in ['min', 'constant', 'mean', 'none', None]:
+        raise ValueError(f'center argument must be on of "min", "constant", "mean", "none" or None. Got {center}')
+    if scale not in ['max', 'constant', 'std']:
+        raise ValueError(f'scale argument must be on of "max", "constant" or "std". Got {scale}')
+    
+    if clip == 'constant':
+        clip_fun = lambda x: np.where(x > clip_value, clip_value, x)
+    elif clip == 'quantile':
+        clip_fun = ft.partial(windsor_clip, quantile=clip_value)
+    elif clip == 'bit':
+        clip_fun = ft.partial(bit_clip, bit=clip_value)
+    elif clip == 'auto':
+        clip_fun = auto_clip
+    elif clip in [None, 'none']:
+        clip_fun = lambda x: x
+    
+    if center == 'min':
+        center_fun = lambda x: x - x.min()
+    elif center == 'mean':
+        center_fun = lambda x: x - x.mean()
+    elif center == 'constant':
+        center_fun = lambda x: x - center_value
+    elif center in [None, 'none']:
+        center_fun = lambda x: x
+
+    if scale == 'max':
+        scale_fun = lambda x: x / x.max()
+    elif scale == 'constant':
+        scale_fun = lambda x: x / scale_value
+    elif scale == 'std':
+        scale_fun = lambda x: x / x.std()
+
+    def func(x):
+        new_x = clip_fun(x)
+        new_x = center_fun(new_x)
+        new_x = scale_fun(new_x)
+        return new_x
+    
+    return func
 
 
 @tf.function(reduce_retracing=True)
-def get_input_tf(input_file):
+def get_input_tf(input_file, **kwargs):
     def get_input_wrap(input_file):
         input_file = Path(input_file.decode())
         input_image = InputFile(input_file).whole()
         input_image = input_image.astype(np.float32)
-        return preprocess(input_image)
+        preprocess_func = get_preprocess_func(**kwargs)
+        return preprocess_func(input_image)
 
     input = tf.numpy_function(get_input_wrap, [input_file], tf.float32)
     return input
-
-
-@tf.function(reduce_retracing=True)
-def get_target_tf(marker_file, target_shape, dim_resolution):
-    def get_target_wrap(marker_file, target_shape, dim_resolution):
-        marker_file = Path(marker_file.decode())
-        blobs = get_target(
-            marker_file,
-            target_shape=target_shape, 
-            default_radius=3.5,  # FIXME: not yet configurable!!
-            dim_resolution=dim_resolution,
-        )
-        return blobs.astype(np.float32)
-
-    target = tf.numpy_function(get_target_wrap, [marker_file, target_shape, dim_resolution], tf.float32)
-    return target

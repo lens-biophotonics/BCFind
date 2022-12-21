@@ -1,7 +1,9 @@
 import numpy as np
+import tensorflow as tf
 import scipy.ndimage.filters as sp_filt
 import scipy.spatial.distance as sp_dist
 
+from pathlib import Path
 from colorama import Fore as FG
 
 from bcfind.utils import iround
@@ -106,4 +108,21 @@ def get_target(
 
         target = target / target.max()
 
+    return target
+
+
+
+@tf.function(reduce_retracing=True)
+def get_target_tf(marker_file, target_shape, dim_resolution):
+    def get_target_wrap(marker_file, target_shape, dim_resolution):
+        marker_file = Path(marker_file.decode())
+        blobs = get_target(
+            marker_file,
+            target_shape=target_shape, 
+            default_radius=3.5,  # FIXME: not yet configurable!!
+            dim_resolution=dim_resolution,
+        )
+        return blobs.astype(np.float32)
+
+    target = tf.numpy_function(get_target_wrap, [marker_file, target_shape, dim_resolution], tf.float32)
     return target

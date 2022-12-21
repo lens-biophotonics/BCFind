@@ -6,7 +6,8 @@ import numpy as np
 import tensorflow as tf
 import concurrent.futures as cf
 
-from bcfind.data.utils import get_input_tf, get_target_tf
+from bcfind.data.utils import get_input_tf
+from bcfind.data.artificial_targets import get_target_tf
 from bcfind.data.augmentation import random_crop_tf, augment
 
 
@@ -40,9 +41,9 @@ class TrainingDataset(tf.keras.utils.Sequence):
     """
     @staticmethod
     @tf.function
-    def parse_imgs(tiff_path, marker_path, dim_resolution):
+    def parse_imgs(tiff_path, marker_path, dim_resolution, preprocess_kwargs):
         logger.info(f'loading {tiff_path}')
-        input_image = get_input_tf(tiff_path)
+        input_image = get_input_tf(tiff_path, **preprocess_kwargs)
 
         logger.info(f'creating blobs from {marker_path}')
         blobs = get_target_tf(marker_path, tf.shape(input_image), dim_resolution)
@@ -59,14 +60,16 @@ class TrainingDataset(tf.keras.utils.Sequence):
         output_shape=None, 
         augmentations=None, 
         augmentations_prob=0.5,
-        use_lmdb_data = False,
+        use_lmdb_data=False,
+        n_workers=10,
+        **preprocess_kwargs,
         ):
         if not use_lmdb_data:
             # with tf.device('/cpu:0'):
             data = tf.data.Dataset.from_tensor_slices((tiff_list, marker_list))
             
             # load images and targets from paths
-            data = data.map(lambda x, y: cls.parse_imgs(x, y, dim_resolution), num_parallel_calls=tf.data.AUTOTUNE, deterministic=False)
+            data = data.map(lambda x, y: cls.parse_imgs(x, y, dim_resolution, preprocess_kwargs), num_parallel_calls=tf.data.AUTOTUNE, deterministic=False)
             
             # cache data after time consuming map and make it shuffle every epoch
             data = data.cache().shuffle(len(marker_list), reshuffle_each_iteration=True)
@@ -101,6 +104,7 @@ class TrainingDataset(tf.keras.utils.Sequence):
         augmentations_prob=0.5,
         use_lmdb_data=False,
         n_workers=10,
+        **preprocess_kwargs,
         ):
 
         self.tiff_list = tiff_list
@@ -112,6 +116,7 @@ class TrainingDataset(tf.keras.utils.Sequence):
         self.augmentations_prob = augmentations_prob
         self.use_lmdb_data = use_lmdb_data
         self.n_workers = n_workers
+        self.preprocess_kwargs = preprocess_kwargs
         self.n = len(self.tiff_list)
 
         if isinstance(dim_resolution, (float, int)):
@@ -121,7 +126,7 @@ class TrainingDataset(tf.keras.utils.Sequence):
             self.lmdb_path = os.path.join('/', *self.tiff_list[0].split('/')[:-3], 'Train_lmdb')
             
             # NOTE: hardcoded data shape for lmdb size!
-            nbytes = np.prod((300, 500, 500)) * 4 # 4 bytes for float32: 1 byte for uint8
+            nbytes = np.prod((160, 480, 480)) * 4 # 4 bytes for float32: 1 byte for uint8
             self.map_size = 2*self.n*nbytes*10
             self.lmdb_env = lmdb.open(self.lmdb_path, map_size=self.map_size, max_dbs=2)
             self.inputs = self.lmdb_env.open_db('Inputs'.encode())
@@ -140,7 +145,7 @@ class TrainingDataset(tf.keras.utils.Sequence):
                 print(f'Writing {i+1}/{len(self.tiff_list)} input-target pair to lmdb')
                 i += 1
                 
-                x = get_input_tf(tiff_file)
+                x = get_input_tf(tiff_file, **self.preprocess_kwargs)
                 y = get_target_tf(marker_file, tf.shape(x), self.dim_resolution)
 
                 fname = tiff_file.split('/')[-1]
@@ -171,15 +176,15 @@ class TrainingDataset(tf.keras.utils.Sequence):
 
                 y = txn.get(key=f.encode(), db=self.targets)
                 y = pickle.loads(y)
-
+                
+                xy = tf.concat([x[tf.newaxis, ...], y[tf.newaxis, ...]], axis=0)
+                
                 if self.output_shape:
-                    xy = tf.concat([x[tf.newaxis, ...], y[tf.newaxis, ...]], axis=0)
                     xy = random_crop_tf(xy, self.output_shape)
-                    x, y = tf.unstack(xy)
                 if self.augmentations:
-                    xy = tf.concat([x[tf.newaxis, ...], y[tf.newaxis, ...]], axis=0)
                     xy = augment(xy, self.augmentations, self.augmentations_prob)
-                    x, y = tf.unstack(xy)
+                
+                x, y = tf.unstack(xy)
                 
                 x_batch.append(x[tf.newaxis, ..., tf.newaxis])
                 y_batch.append(y[tf.newaxis, ..., tf.newaxis])
