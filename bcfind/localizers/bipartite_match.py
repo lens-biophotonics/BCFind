@@ -16,10 +16,10 @@ def bipartite_match(true_centers, pred_centers, max_match_dist, dim_resolution=1
     
     Parameters
     ----------
-    true_centers : numpy.array or pandas.DataFrame
+    true_centers : numpy.array
       array of dim(n_cells, n_dim)
 
-    pred_centers : numpy.array or pandas.DataFrame
+    pred_centers : numpy.array
       array of dim(n_pred_cells, n_dim)
 
     max_distance : float
@@ -34,10 +34,8 @@ def bipartite_match(true_centers, pred_centers, max_match_dist, dim_resolution=1
     if np.isscalar(dim_resolution):
         dim_resolution = (dim_resolution, ) * true_centers.shape[1]
     
-    dim_resolution = np.array(dim_resolution)
-
-    scaled_true = true_centers * dim_resolution
-    scaled_pred = pred_centers * dim_resolution
+    scaled_true = true_centers.astype('float32') * dim_resolution
+    scaled_pred = pred_centers.astype('float32') * dim_resolution
 
     dist = sp.spatial.distance.cdist(scaled_true, scaled_pred, metric='euclidean')
     dist[dist >= max_match_dist] = 1e9
