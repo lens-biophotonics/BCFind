@@ -25,8 +25,8 @@ class Recall(tf.keras.metrics.Metric):
         tp = tf.logical_and(tf.equal(y_true, 1), tf.equal(y_pred, 1))
         fn = tf.logical_and(tf.equal(y_true, 1), tf.equal(y_pred, 0))
 
-        tp = self.mask_fn(tp)
-        fn = self.mask_fn(fn)
+        tp = tf.map_fn(self.mask_fn, tp)
+        fn = tf.map_fn(self.mask_fn, fn)
 
         tp = tf.cast(tp, self.dtype)
         fn = tf.cast(fn, self.dtype)
@@ -71,8 +71,8 @@ class Precision(tf.keras.metrics.Metric):
         tp = tf.logical_and(tf.equal(y_true, 1), tf.equal(y_pred, 1))
         fp = tf.logical_and(tf.equal(y_true, 0), tf.equal(y_pred, 1))
 
-        tp = self.mask_fn(tp)
-        fp = self.mask_fn(fp)
+        tp = tf.map_fn(self.mask_fn, tp)
+        fp = tf.map_fn(self.mask_fn, fp)
 
         tp = tf.cast(tp, self.dtype)
         fp = tf.cast(fp, self.dtype)
@@ -119,9 +119,9 @@ class F1(tf.keras.metrics.Metric):
         fp = tf.logical_and(tf.equal(y_true, 0), tf.equal(y_pred, 1))
         fn = tf.logical_and(tf.equal(y_true, 1), tf.equal(y_pred, 0))
 
-        tp = self.mask_fn(tp)
-        fp = self.mask_fn(fp)
-        fn = self.mask_fn(fn)
+        tp = tf.map_fn(self.mask_fn, tp)
+        fp = tf.map_fn(self.mask_fn, fp)
+        fn = tf.map_fn(self.mask_fn, fn)
 
         tp = tf.cast(tp, self.dtype)
         fp = tf.cast(fp, self.dtype)
