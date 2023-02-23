@@ -11,17 +11,19 @@ class DiceLoss(tf.keras.losses.Loss):
 
         if self.from_logits:
             y_pred = tf.sigmoid(y_pred)
-        
+
         numerator = 2 * tf.reduce_sum(y_true * y_pred, tf.range(1, tf.rank(y_pred)))
-        denominator = tf.reduce_sum(y_true * y_true, tf.range(1, tf.rank(y_pred))) + tf.reduce_sum(y_pred * y_pred, tf.range(1, tf.rank(y_pred)))
+        denominator = tf.reduce_sum(
+            y_true * y_true, tf.range(1, tf.rank(y_pred))
+        ) + tf.reduce_sum(y_pred * y_pred, tf.range(1, tf.rank(y_pred)))
         return 1 - numerator / denominator
-    
-    def get_config(self,):
-        config = {
-            'from_logits': self.from_logits
-        }
+
+    def get_config(
+        self,
+    ):
+        config = {"from_logits": self.from_logits}
         base_config = super(DiceLoss).get_config()
         return dict(list(config.items()) + list(base_config.items()))
 
 
-tf.keras.utils.get_custom_objects().update({'DiceLoss': DiceLoss})
+tf.keras.utils.get_custom_objects().update({"DiceLoss": DiceLoss})

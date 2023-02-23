@@ -14,7 +14,11 @@ from skimage.feature.blob import _prune_blobs
 
 from bcfind.localizers import bipartite_match
 from bcfind.localizers.utils import get_counts_from_bm_eval
-from bcfind.utils import metrics, remove_border_points_from_array, remove_border_points_from_df
+from bcfind.utils import (
+    metrics,
+    remove_border_points_from_array,
+    remove_border_points_from_df,
+)
 
 # # Disable memory pool for device memory (GPU)
 # cp.cuda.set_allocator(None)
@@ -22,11 +26,13 @@ from bcfind.utils import metrics, remove_border_points_from_array, remove_border
 # cp.cuda.set_pinned_memory_allocator(None)
 
 
-def cp_peak_local_max(image, threshold_rel=0., footprint=None):
+def cp_peak_local_max(image, threshold_rel=0.0, footprint=None):
     if footprint is None:
-        footprint = cp.ones((3, ) * image.ndim)
+        footprint = cp.ones((3,) * image.ndim)
 
-    maxima = (image == cpx_img.maximum_filter(image, footprint=footprint, mode='constant', cval=0.0))
+    maxima = image == cpx_img.maximum_filter(
+        image, footprint=footprint, mode="constant", cval=0.0
+    )
 
     thresh = cp.max(image) * threshold_rel
     maxima = cp.logical_and(maxima, image >= thresh)
@@ -36,8 +42,8 @@ def cp_peak_local_max(image, threshold_rel=0., footprint=None):
 
 
 def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
-    r""" Equivalent function to skimage.feature.blob_dog which runs on the GPU, making computation 10 times faster.
-    
+    r"""Equivalent function to skimage.feature.blob_dog which runs on the GPU, making computation 10 times faster.
+
     Finds blobs in the given grayscale image.
     Blobs are found using the Difference of Gaussian (DoG) method [1]_.
     For each blob found, the method returns its coordinates and the standard
@@ -61,13 +67,13 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
         The ratio between the standard deviation of Gaussian Kernels used for
         computing the Difference of Gaussians
     threshold_rel : float, optional.
-        A value between 0 and 1. The relative lower bound for scale space maxima. 
-        Local maxima smaller than max(image) * thresh are ignored. 
+        A value between 0 and 1. The relative lower bound for scale space maxima.
+        Local maxima smaller than max(image) * thresh are ignored.
         Reduce this to detect blobs with less intensities.
     overlap : float, optional
         A value between 0 and 1. If the area of two blobs overlaps by a
         fraction greater than `threshold`, the smaller blob is eliminated.
-    
+
     Returns
     -------
     A : (n, image.ndim + sigma) ndarray
@@ -92,20 +98,19 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
     scalar_sigma = np.isscalar(max_sigma) and np.isscalar(min_sigma)
 
     if np.isscalar(min_sigma):
-        min_sigma = np.array((min_sigma, ) * image.ndim)
+        min_sigma = np.array((min_sigma,) * image.ndim)
     else:
         min_sigma = np.array(min_sigma)
     if np.isscalar(max_sigma):
-        max_sigma = np.array((max_sigma, ) * image.ndim)
+        max_sigma = np.array((max_sigma,) * image.ndim)
     else:
         max_sigma = np.array(max_sigma)
-    
+
     # k such that min_sigma*(sigma_ratio**k) > max_sigma
     k = int(np.mean(np.log(max_sigma / min_sigma) / np.log(sigma_ratio) + 1))
 
     # a geometric progression of standard deviations for gaussian kernels
-    sigma_list = np.array([min_sigma * (sigma_ratio ** i)
-                           for i in range(k + 1)])
+    sigma_list = np.array([min_sigma * (sigma_ratio**i) for i in range(k + 1)])
     gpu_image = cp.asarray(image)
 
     gpu_detected_blobs = []
@@ -113,7 +118,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
         low = cpx_img.gaussian_filter(gpu_image, sigma_list[i])
         high = cpx_img.gaussian_filter(gpu_image, sigma_list[i + 1])
         dog_image = (low - high) * cp.mean(sigma_list[i])
-        
+
         lm = cp_peak_local_max(
             dog_image,
             threshold_rel=threshold_rel,
@@ -121,7 +126,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
         )
         lm = cp.c_[lm, cp.ones(lm.shape[0]) * i]
         gpu_detected_blobs.append(lm)
-    
+
     gpu_detected_blobs = cp.concatenate(gpu_detected_blobs)
     detected_blobs = cp.asnumpy(gpu_detected_blobs).astype("float32")
 
@@ -149,16 +154,20 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, threshold_rel, overlap):
 class BlobDoG:
     def __init__(self, n_dim=2, dim_resolution=1, exclude_border=None):
         if np.isscalar(dim_resolution):
-            dim_resolution = (dim_resolution, ) * n_dim
+            dim_resolution = (dim_resolution,) * n_dim
         elif dim_resolution is None:
-            dim_resolution = (1, ) * n_dim
+            dim_resolution = (1,) * n_dim
         elif len(dim_resolution) != n_dim:
-            raise ValueError(f'Length of dim_resolution must be = {n_dim}. Found {dim_resolution}')
-        
+            raise ValueError(
+                f"Length of dim_resolution must be = {n_dim}. Found {dim_resolution}"
+            )
+
         if np.isscalar(exclude_border):
-            exclude_border = (exclude_border, ) * n_dim
+            exclude_border = (exclude_border,) * n_dim
         elif exclude_border is not None and len(exclude_border) != n_dim:
-            raise ValueError(f'Length of exclude_border must be = {n_dim}. Found {exclude_border}')
+            raise ValueError(
+                f"Length of exclude_border must be = {n_dim}. Found {exclude_border}"
+            )
 
         self.D = n_dim
         self.dim_resolution = np.array(dim_resolution)
@@ -189,31 +198,31 @@ class BlobDoG:
         self.overlap = parameters["overlap"]
         self.threshold = parameters["threshold"]
 
-    def predict(self, x, parameters=None, exclude_border='default'):
+    def predict(self, x, parameters=None, exclude_border="default"):
         """Predicts blob locations from 2 or 3 dimensional image. Blobs are considered white on black.
         If exclude_border has been specified, detected blobs inside the borders of x will be deleted.
 
         Args:
             x (ndarray): Image array. Can be 2 or 3 dimensional.
-            parameters (dict, optional): Dictionary of blob detection parameters. 
+            parameters (dict, optional): Dictionary of blob detection parameters.
                 Expected keys are: [`min_rad`, `max_rad`, `sigma_ratio`, `overlap`, `threshold`].
                 Defaults to None will assign default or previously setted parameters.
 
         Returns:
-            [ndarray]: 2 dimensional array with shape [n_blobs, (n_dim + len(dim_resolution))]. 
+            [ndarray]: 2 dimensional array with shape [n_blobs, (n_dim + len(dim_resolution))].
                 First `n_dim` columns are the coordinates of each detected blob, last columns are the standard deviations
                 which detected the blob. For isotropic images (len(dim_resolution)=1) a single standard deviation is returned,
                 for anysotropic images (len(dim_resolution)==n_dim) the standard deviation of each axis is returned.
         """
         if type(x) == bytes:
             x = pickle.loads(x)
-        
-        x = x.astype('float32')
+
+        x = x.astype("float32")
 
         if parameters is None:
             min_sigma = (self.min_rad / self.dim_resolution) / np.sqrt(self.D)
             max_sigma = (self.max_rad / self.dim_resolution) / np.sqrt(self.D)
-            
+
             with cp.cuda.Device(cp.cuda.runtime.getDeviceCount() - 1):
                 with cp.cuda.Stream():
                     centers = blob_dog(
@@ -227,7 +236,7 @@ class BlobDoG:
         else:
             min_sigma = (parameters["min_rad"] / self.dim_resolution) / np.sqrt(self.D)
             max_sigma = (parameters["max_rad"] / self.dim_resolution) / np.sqrt(self.D)
-            
+
             with cp.cuda.Device(cp.cuda.runtime.getDeviceCount() - 1):
                 with cp.cuda.Stream():
                     centers = blob_dog(
@@ -241,12 +250,10 @@ class BlobDoG:
 
         if isinstance(exclude_border, (list, tuple, int, float)):
             if np.isscalar(exclude_border):
-                exclude_border = (exclude_border, ) * self.n_dim
+                exclude_border = (exclude_border,) * self.n_dim
 
-            centers = remove_border_points_from_array(
-                centers, x.shape, exclude_border
-            )
-        elif exclude_border == 'default':
+            centers = remove_border_points_from_array(centers, x.shape, exclude_border)
+        elif exclude_border == "default":
             if self.exclude_border is not None:
                 centers = remove_border_points_from_array(
                     centers, x.shape, self.exclude_border
@@ -260,18 +267,18 @@ class BlobDoG:
         Args:
             y_pred (ndarray): 2 dimensional array of shape [n_blobs, n_dim] of predicted blobs
             y_true (ndarray): 2 dimensional array of shape [n_blobs, n_dim] of true blobs
-            max_match_dist (scalar): maximum distance between predicted and true blobs for a correct prediction. 
-                It must be in the same scale as dim_resolution. 
-            evaluation_type (str, optional): One of ["complete", "counts", "f1", "acc", "prec", "rec"]. 
+            max_match_dist (scalar): maximum distance between predicted and true blobs for a correct prediction.
+                It must be in the same scale as dim_resolution.
+            evaluation_type (str, optional): One of ["complete", "counts", "f1", "acc", "prec", "rec"].
                 "complete" returns every centroid labelled as TP, FP, or FN.
-                "counts" returns only the counts of TP, FP, FN plus the total number of predicted blobs 
+                "counts" returns only the counts of TP, FP, FN plus the total number of predicted blobs
                 and the total number of true blobs.
                 "f1", "acc", "prec", "rec" returns only the requested metric evaluation.
                 Defaults to "complete".
 
         Returns:
             [pandas.DataFrame or scalar]: if evaluation_type = "complete" returns a pandas.DataFrame with every centroid
-                labelled as TP, FP, or FN. If evaluation_type = "counts" returns a pandas.DataFrame with the counts of TP, FP, FN, 
+                labelled as TP, FP, or FN. If evaluation_type = "counts" returns a pandas.DataFrame with the counts of TP, FP, FN,
                 the total number of predicted blobs and the total number of true blobs.
                 if evaluation_type is one of ["f1", "acc", "prec", "rec"] returns the scalar of requested metric.
         """
@@ -295,11 +302,11 @@ class BlobDoG:
             return metrics(eval_counts)[evaluation_type]
 
     def predict_and_evaluate(
-        self, 
-        x, 
-        y, 
-        max_match_dist, 
-        evaluation_type="complete", 
+        self,
+        x,
+        y,
+        max_match_dist,
+        evaluation_type="complete",
         parameters=None,
     ):
         """Predicts blob coordinates from x and evaluates the result with the true coordinates in y.
@@ -308,15 +315,15 @@ class BlobDoG:
         Args:
             x (ndarray): array of n_dim dimensions
             y (ndarray): 2 dimensional array with shape [n_blobs, n_dim] of true blobs coordinates
-            max_match_dist (scalar): maximum distance between predicted and true blobs for a correct prediction. 
+            max_match_dist (scalar): maximum distance between predicted and true blobs for a correct prediction.
                 It must be in the same scale as dim_resolution.
-            evaluation_type (str, optional): One of ["complete", "counts", "f1", "acc", "prec", "rec"]. 
+            evaluation_type (str, optional): One of ["complete", "counts", "f1", "acc", "prec", "rec"].
                 "complete" returns every centroid labelled as TP, FP, or FN.
-                "counts" returns only the counts of TP, FP, FN plus the total number of predicted blobs 
+                "counts" returns only the counts of TP, FP, FN plus the total number of predicted blobs
                 and the total number of true blobs.
                 "f1", "acc", "prec", "rec" returns only the requested metric evaluation.
                 Defaults to "complete".
-            parameters (dict, optional): Dictionary of blob detection parameters. 
+            parameters (dict, optional): Dictionary of blob detection parameters.
                 Expected keys are: [`min_rad`, `max_rad`, `sigma_ratio`, `overlap`, `threshold`].
                 Defaults to None will assign default or previously setted parameters.
 
@@ -325,20 +332,22 @@ class BlobDoG:
         """
         if type(x) == bytes:
             x = pickle.loads(x)
-        
-        x = x.astype('float32')
+
+        x = x.astype("float32")
 
         y_pred = self.predict(x, parameters, exclude_border=None)
         # if self.exclude_border is not None:
         #     y_pred = remove_border_points_from_array(y_pred, x.shape, self.exclude_border / 2)
         #     y = remove_border_points_from_array(y, x.shape, self.exclude_border / 2)
-        
+
         labeled_centers = self.evaluate(y_pred[:, :3], y, max_match_dist=max_match_dist)
 
         if self.exclude_border is not None:
-            labeled_centers = remove_border_points_from_df(labeled_centers, ['x', 'y', 'z'], x.shape, self.exclude_border)
-        
-        if evaluation_type == 'complete':
+            labeled_centers = remove_border_points_from_df(
+                labeled_centers, ["x", "y", "z"], x.shape, self.exclude_border
+            )
+
+        if evaluation_type == "complete":
             return labeled_centers
         else:
             eval_counts = get_counts_from_bm_eval(labeled_centers)
@@ -348,12 +357,12 @@ class BlobDoG:
                 return metrics(eval_counts)[evaluation_type]
 
     def _objective(
-        self, 
-        parameters, 
-        X, 
-        Y, 
-        max_match_dist, 
-        checkpoint_dir=None, 
+        self,
+        parameters,
+        X,
+        Y,
+        max_match_dist,
+        checkpoint_dir=None,
         n_cpu=1,
     ):
         if isinstance(X, lmdb.Cursor):
@@ -370,7 +379,10 @@ class BlobDoG:
                     state = json.load(f)
 
         if n_cpu == 1:
-            res = [self.predict_and_evaluate(x, y, max_match_dist, 'counts', parameters) for x, y, in zip(X, Y)]
+            res = [
+                self.predict_and_evaluate(x, y, max_match_dist, "counts", parameters)
+                for x, y, in zip(X, Y)
+            ]
         else:
             with cf.ThreadPoolExecutor(n_cpu) as pool:
                 futures = [
@@ -403,7 +415,7 @@ class BlobDoG:
                     state["step"] = self.train_step
                     with open(checkpoint_file, "w") as f:
                         json.dump(state, f)
-        return {'loss': -f1, 'status': ho.STATUS_OK}
+        return {"loss": -f1, "status": ho.STATUS_OK}
 
     def fit(
         self,
@@ -420,7 +432,7 @@ class BlobDoG:
         Args:
             X (iterable): Iterable of n_dim dimensional images. Length of X must be equal to lenght of Y.
             Y (iterable): Iterable of ndarrays of true blob coordinates. Length of Y must be equal to lenght of X.
-            max_match_dist (scalar): Maximum distance between predicted and true blobs for a correct prediction. 
+            max_match_dist (scalar): Maximum distance between predicted and true blobs for a correct prediction.
                 It must be in the same scale as dim_resolution.
             n_iter (int, optional): Number of TPE iterations to perform. Defaults to 60.
             checkpoint_dir (str, optional): Path to the directory where saving the parameters during training. Defaults to None.
@@ -445,9 +457,9 @@ class BlobDoG:
         }
 
         best_par = ho.fmin(
-            fn=obj_wrapper, 
-            space=search_space, 
-            algo=ho.tpe.suggest, 
+            fn=obj_wrapper,
+            space=search_space,
+            algo=ho.tpe.suggest,
             max_evals=n_iter,
         )
 

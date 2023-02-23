@@ -8,7 +8,9 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.utils import get_custom_objects
 
 
-@tf.keras.utils.register_keras_serializable(package='BCFind', name='SwitchNormalization')
+@tf.keras.utils.register_keras_serializable(
+    package="BCFind", name="SwitchNormalization"
+)
 class SwitchNormalization(Layer):
     """Switchable Normalization layer
     Switch Normalization performs Instance Normalization, Layer Normalization and Batch
@@ -65,28 +67,30 @@ class SwitchNormalization(Layer):
         - code from https://github.com/titu1994/keras-switchnorm
     """
 
-    def __init__(self,
-                 axis=-1,
-                 momentum=0.99,
-                 epsilon=1e-3,
-                 final_gamma=False,
-                 center=True,
-                 scale=True,
-                 beta_initializer='zeros',
-                 gamma_initializer='ones',
-                 mean_weights_initializer='ones',
-                 variance_weights_initializer='ones',
-                 moving_mean_initializer='ones',
-                 moving_variance_initializer='zeros',
-                 beta_regularizer=None,
-                 gamma_regularizer=None,
-                 mean_weights_regularizer=None,
-                 variance_weights_regularizer=None,
-                 beta_constraint=None,
-                 gamma_constraint=None,
-                 mean_weights_constraints=None,
-                 variance_weights_constraints=None,
-                 **kwargs):
+    def __init__(
+        self,
+        axis=-1,
+        momentum=0.99,
+        epsilon=1e-3,
+        final_gamma=False,
+        center=True,
+        scale=True,
+        beta_initializer="zeros",
+        gamma_initializer="ones",
+        mean_weights_initializer="ones",
+        variance_weights_initializer="ones",
+        moving_mean_initializer="ones",
+        moving_variance_initializer="zeros",
+        beta_regularizer=None,
+        gamma_regularizer=None,
+        mean_weights_regularizer=None,
+        variance_weights_regularizer=None,
+        beta_constraint=None,
+        gamma_constraint=None,
+        mean_weights_constraints=None,
+        variance_weights_constraints=None,
+        **kwargs
+    ):
         super(SwitchNormalization, self).__init__(**kwargs)
         self.supports_masking = True
         self.axis = axis
@@ -97,79 +101,91 @@ class SwitchNormalization(Layer):
 
         self.beta_initializer = initializers.get(beta_initializer)
         if final_gamma:
-            self.gamma_initializer = initializers.get('zeros')
+            self.gamma_initializer = initializers.get("zeros")
         else:
             self.gamma_initializer = initializers.get(gamma_initializer)
         self.mean_weights_initializer = initializers.get(mean_weights_initializer)
-        self.variance_weights_initializer = initializers.get(variance_weights_initializer)
+        self.variance_weights_initializer = initializers.get(
+            variance_weights_initializer
+        )
         self.moving_mean_initializer = initializers.get(moving_mean_initializer)
         self.moving_variance_initializer = initializers.get(moving_variance_initializer)
         self.beta_regularizer = regularizers.get(beta_regularizer)
         self.gamma_regularizer = regularizers.get(gamma_regularizer)
         self.mean_weights_regularizer = regularizers.get(mean_weights_regularizer)
-        self.variance_weights_regularizer = regularizers.get(variance_weights_regularizer)
+        self.variance_weights_regularizer = regularizers.get(
+            variance_weights_regularizer
+        )
         self.beta_constraint = constraints.get(beta_constraint)
         self.gamma_constraint = constraints.get(gamma_constraint)
         self.mean_weights_constraints = constraints.get(mean_weights_constraints)
-        self.variance_weights_constraints = constraints.get(variance_weights_constraints)
+        self.variance_weights_constraints = constraints.get(
+            variance_weights_constraints
+        )
 
     def build(self, input_shape):
         dim = input_shape[self.axis]
 
         if dim is None:
-            raise ValueError('Axis ' + str(self.axis) + ' of '
-                             'input tensor should have a defined dimension '
-                             'but the layer received an input with shape ' +
-                             str(input_shape) + '.')
+            raise ValueError(
+                "Axis " + str(self.axis) + " of "
+                "input tensor should have a defined dimension "
+                "but the layer received an input with shape " + str(input_shape) + "."
+            )
 
-        self.input_spec = InputSpec(ndim=len(input_shape),
-                                    axes={self.axis: dim})
+        self.input_spec = InputSpec(ndim=len(input_shape), axes={self.axis: dim})
         shape = (dim,)
 
         if self.scale:
             self.gamma = self.add_weight(
                 shape=shape,
-                name='gamma',
+                name="gamma",
                 initializer=self.gamma_initializer,
                 regularizer=self.gamma_regularizer,
-                constraint=self.gamma_constraint)
+                constraint=self.gamma_constraint,
+            )
         else:
             self.gamma = None
         if self.center:
             self.beta = self.add_weight(
                 shape=shape,
-                name='beta',
+                name="beta",
                 initializer=self.beta_initializer,
                 regularizer=self.beta_regularizer,
-                constraint=self.beta_constraint)
+                constraint=self.beta_constraint,
+            )
         else:
             self.beta = None
 
         self.moving_mean = self.add_weight(
             shape=shape,
-            name='moving_mean',
+            name="moving_mean",
             initializer=self.moving_mean_initializer,
-            trainable=False)
+            trainable=False,
+        )
 
         self.moving_variance = self.add_weight(
             shape=shape,
-            name='moving_variance',
+            name="moving_variance",
             initializer=self.moving_variance_initializer,
-            trainable=False)
+            trainable=False,
+        )
 
         self.mean_weights = self.add_weight(
             shape=(3,),
-            name='mean_weights',
+            name="mean_weights",
             initializer=self.mean_weights_initializer,
             regularizer=self.mean_weights_regularizer,
-            constraint=self.mean_weights_constraints)
+            constraint=self.mean_weights_constraints,
+        )
 
         self.variance_weights = self.add_weight(
             shape=(3,),
-            name='variance_weights',
+            name="variance_weights",
             initializer=self.variance_weights_initializer,
             regularizer=self.variance_weights_regularizer,
-            constraint=self.variance_weights_constraints)
+            constraint=self.variance_weights_constraints,
+        )
 
         self.built = True
 
@@ -200,20 +216,25 @@ class SwitchNormalization(Layer):
             mean_batch_reshaped = K.flatten(mean_batch)
             variance_batch_reshaped = K.flatten(variance_batch)
 
-            if K.backend() != 'cntk':
-                sample_size = K.prod([K.shape(inputs)[axis]
-                                      for axis in reduction_axes])
+            if K.backend() != "cntk":
+                sample_size = K.prod([K.shape(inputs)[axis] for axis in reduction_axes])
                 sample_size = K.cast(sample_size, dtype=K.dtype(inputs))
 
                 # sample variance - unbiased estimator of population variance
-                variance_batch_reshaped *= sample_size / (sample_size - (1.0 + self.epsilon))
+                variance_batch_reshaped *= sample_size / (
+                    sample_size - (1.0 + self.epsilon)
+                )
 
-            self.add_update([K.moving_average_update(self.moving_mean,
-                                                     mean_batch_reshaped,
-                                                     self.momentum),
-                             K.moving_average_update(self.moving_variance,
-                                                     variance_batch_reshaped,
-                                                     self.momentum)])
+            self.add_update(
+                [
+                    K.moving_average_update(
+                        self.moving_mean, mean_batch_reshaped, self.momentum
+                    ),
+                    K.moving_average_update(
+                        self.moving_variance, variance_batch_reshaped, self.momentum
+                    ),
+                ]
+            )
 
             return normalize_func(mean_batch, variance_batch)
 
@@ -230,13 +251,17 @@ class SwitchNormalization(Layer):
             mean_weights = K.softmax(self.mean_weights, axis=0)
             variance_weights = K.softmax(self.variance_weights, axis=0)
 
-            mean = (mean_weights[0] * mean_instance +
-                    mean_weights[1] * mean_layer +
-                    mean_weights[2] * mean_batch)
+            mean = (
+                mean_weights[0] * mean_instance
+                + mean_weights[1] * mean_layer
+                + mean_weights[2] * mean_batch
+            )
 
-            variance = (variance_weights[0] * variance_instance +
-                        variance_weights[1] * variance_layer +
-                        variance_weights[2] * variance_batch)
+            variance = (
+                variance_weights[0] * variance_instance
+                + variance_weights[1] * variance_layer
+                + variance_weights[2] * variance_batch
+            )
 
             outputs = (inputs - mean) / (K.sqrt(variance + self.epsilon))
 
@@ -253,31 +278,45 @@ class SwitchNormalization(Layer):
         if training in {0, False}:
             return inference_phase()
 
-        return K.in_train_phase(training_phase,
-                                inference_phase,
-                                training=training)
+        return K.in_train_phase(training_phase, inference_phase, training=training)
 
     def get_config(self):
         config = {
-            'axis': self.axis,
-            'epsilon': self.epsilon,
-            'momentum': self.momentum,
-            'center': self.center,
-            'scale': self.scale,
-            'beta_initializer': initializers.serialize(self.beta_initializer),
-            'gamma_initializer': initializers.serialize(self.gamma_initializer),
-            'mean_weights_initializer': initializers.serialize(self.mean_weights_initializer),
-            'variance_weights_initializer': initializers.serialize(self.variance_weights_initializer),
-            'moving_mean_initializer': initializers.serialize(self.moving_mean_initializer),
-            'moving_variance_initializer': initializers.serialize(self.moving_variance_initializer),
-            'beta_regularizer': regularizers.serialize(self.beta_regularizer),
-            'gamma_regularizer': regularizers.serialize(self.gamma_regularizer),
-            'mean_weights_regularizer': regularizers.serialize(self.mean_weights_regularizer),
-            'variance_weights_regularizer': regularizers.serialize(self.variance_weights_regularizer),
-            'beta_constraint': constraints.serialize(self.beta_constraint),
-            'gamma_constraint': constraints.serialize(self.gamma_constraint),
-            'mean_weights_constraints': constraints.serialize(self.mean_weights_constraints),
-            'variance_weights_constraints': constraints.serialize(self.variance_weights_constraints),
+            "axis": self.axis,
+            "epsilon": self.epsilon,
+            "momentum": self.momentum,
+            "center": self.center,
+            "scale": self.scale,
+            "beta_initializer": initializers.serialize(self.beta_initializer),
+            "gamma_initializer": initializers.serialize(self.gamma_initializer),
+            "mean_weights_initializer": initializers.serialize(
+                self.mean_weights_initializer
+            ),
+            "variance_weights_initializer": initializers.serialize(
+                self.variance_weights_initializer
+            ),
+            "moving_mean_initializer": initializers.serialize(
+                self.moving_mean_initializer
+            ),
+            "moving_variance_initializer": initializers.serialize(
+                self.moving_variance_initializer
+            ),
+            "beta_regularizer": regularizers.serialize(self.beta_regularizer),
+            "gamma_regularizer": regularizers.serialize(self.gamma_regularizer),
+            "mean_weights_regularizer": regularizers.serialize(
+                self.mean_weights_regularizer
+            ),
+            "variance_weights_regularizer": regularizers.serialize(
+                self.variance_weights_regularizer
+            ),
+            "beta_constraint": constraints.serialize(self.beta_constraint),
+            "gamma_constraint": constraints.serialize(self.gamma_constraint),
+            "mean_weights_constraints": constraints.serialize(
+                self.mean_weights_constraints
+            ),
+            "variance_weights_constraints": constraints.serialize(
+                self.variance_weights_constraints
+            ),
         }
         base_config = super(SwitchNormalization, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))

@@ -2,6 +2,7 @@ import yaml
 import numpy as np
 import tensorflow as tf
 
+
 # Class to acces dictionary keys as if they were attributes
 class AttrDict(dict):
     def __init__(self, *args, **kwargs):
@@ -15,19 +16,19 @@ class TrainConfiguration:
             conf = yaml.load(f, Loader=yaml.FullLoader)
 
         yaml_key_to_attr = {
-            'Dataset': 'data',
-            'Experiment': 'exp',
-            'DataAugmentation': 'data_aug',
-            'PreProcessing': 'preproc',
-            'UNet': 'unet',
-            'DoG': 'dog',
+            "Dataset": "data",
+            "Experiment": "exp",
+            "DataAugmentation": "data_aug",
+            "PreProcessing": "preproc",
+            "UNet": "unet",
+            "DoG": "dog",
         }
         for k, v in yaml_key_to_attr.items():
             try:
                 setattr(self, v, AttrDict(conf[k]))
             except KeyError:
                 pass
-        
+
         # Dataset
         if self.data:
             self.data.shape = np.array(self.data.shape)
@@ -45,12 +46,12 @@ class TrainConfiguration:
         if self.data_aug.augment:
             self.data_aug.op_args = {}
             self.data_aug.op_probs = []
-            
+
             for key, value in self.data_aug.items():
-                if key not in ['augment', 'op_args', 'op_probs']:
+                if key not in ["augment", "op_args", "op_probs"]:
                     self.data_aug.op_args[key] = value
-                    self.data_aug.op_probs.append(value['p'])
-                    del self.data_aug.op_args[key]['p']
+                    self.data_aug.op_probs.append(value["p"])
+                    del self.data_aug.op_args[key]["p"]
         else:
             self.data_aug.op_args = None
             self.data_aug.op_probs = None
@@ -62,21 +63,25 @@ class TrainConfiguration:
 
         if isinstance(self.unet.regularizer, dict):
             if len(self.unet.regularizer) > 1:
-                raise ValueError(f'''
+                raise ValueError(
+                    f"""
                 Dictionary specification for UNet regularizer must have max length = 1. 
                 Got {self.unet.regularizer} of length {len(self.unet.regularizer)}
-                ''')
+                """
+                )
 
             key, value = list(self.unet.regularizer.items())[0]
-            if key == 'l1':
+            if key == "l1":
                 self.unet.regularizer = tf.keras.regularizers.L1(value)
-            elif key == 'l2':
+            elif key == "l2":
                 self.unet.regularizer = tf.keras.regularizers.L2(value)
             else:
-                raise ValueError(f'''
+                raise ValueError(
+                    f"""
                 Dictionary keys for UNet regularizer must be one of ['l1', 'l2'].
                 Got instead {key}
-                ''')
+                """
+                )
 
         # DoG
         self.dog.exclude_border = np.array(self.data.cell_radius) * 2
@@ -91,9 +96,9 @@ class VFVConfiguration:
             conf = yaml.load(f, Loader=yaml.FullLoader)
 
         yaml_key_to_attr = {
-            'Experiment': 'exp',
-            'VirtualFusedVolume': 'vfv',
-            'PreProcessing': 'preproc'
+            "Experiment": "exp",
+            "VirtualFusedVolume": "vfv",
+            "PreProcessing": "preproc",
         }
         for k, v in yaml_key_to_attr.items():
             try:
@@ -123,4 +128,4 @@ class VFVConfiguration:
 
 if __name__ == "__main__":
     args = VFVConfiguration("/home/curzio/Python/Projects/BCFind/vfv_config.yaml")
-    print(args.preproc.center not in ['none', None])
+    print(args.preproc.center not in ["none", None])

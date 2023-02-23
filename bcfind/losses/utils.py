@@ -11,7 +11,5 @@ def get_mask_fn(target_shape, border_size):
         border_size[2] : target_shape[2] - border_size[2],
     ] = 1
 
-    framing_mask = tf.convert_to_tensor(
-        framing_mask.astype("bool"), dtype=tf.bool
-    )
+    framing_mask = tf.convert_to_tensor(framing_mask.astype("bool"), dtype=tf.bool)
     return ft.partial(tf.boolean_mask, mask=framing_mask)

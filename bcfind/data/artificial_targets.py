@@ -25,8 +25,13 @@ def get_target(
     X = get_gt_as_numpy(marker_path)
 
     # remove points outside the target shape
-    X = X[(X[:, 0]>0) & (X[:, 1]>0) & (X[:, 2]>0), :]
-    X = X[(X[:, 0]<target_shape[0]) & (X[:, 1]<target_shape[1]) & (X[:, 2]<target_shape[2]), :]
+    X = X[(X[:, 0] > 0) & (X[:, 1] > 0) & (X[:, 2] > 0), :]
+    X = X[
+        (X[:, 0] < target_shape[0])
+        & (X[:, 1] < target_shape[1])
+        & (X[:, 2] < target_shape[2]),
+        :,
+    ]
 
     if downscale_factors is not None:
         X *= downscale_factors
@@ -93,7 +98,7 @@ def get_target(
             dim_sigma = sigma / (dim_resolution / np.min(dim_resolution))
 
             component = sp_filt.gaussian_filter(
-                component, dim_sigma, truncate=4., mode="constant"
+                component, dim_sigma, truncate=4.0, mode="constant"
             )
             component = component / component.max()
 
@@ -111,18 +116,19 @@ def get_target(
     return target
 
 
-
 @tf.function(reduce_retracing=True)
 def get_target_tf(marker_file, target_shape, dim_resolution):
     def get_target_wrap(marker_file, target_shape, dim_resolution):
         marker_file = Path(marker_file.decode())
         blobs = get_target(
             marker_file,
-            target_shape=target_shape, 
+            target_shape=target_shape,
             default_radius=3.5,  # FIXME: not yet configurable!!
             dim_resolution=dim_resolution,
         )
         return blobs.astype(np.float32)
 
-    target = tf.numpy_function(get_target_wrap, [marker_file, target_shape, dim_resolution], tf.float32)
+    target = tf.numpy_function(
+        get_target_wrap, [marker_file, target_shape, dim_resolution], tf.float32
+    )
     return target
