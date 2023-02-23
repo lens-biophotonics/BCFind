@@ -288,18 +288,20 @@ def main():
     )
 
     # Merge and save all substack predictions
+    print("VFV predictions finished, making cloud...")
     cloud_df = make_cloud(conf.vfv.pred_outdir, conf.vfv.dim_resolution)
     
     # If mask is given, remove predicted points outside of it
     if vfv_mask is not None:
         mask_shape = np.array(vfv_mask.shape)
-        mask_rescale_factors = vfv.shape // mask_shape
+        mask_rescale_factors = vfv.shape / mask_shape
+        # mask_resolution = conf.vfv.dim_resolution * mask_rescale_factors
 
-        cloud_df_rescaled = cloud_df[['z', 'y', 'x']] / mask_rescale_factors
+        cloud_df_rescaled = cloud_df[['z', 'y', 'x']] / (conf.vfv.dim_resolution * mask_rescale_factors)
         z_coords, y_coords, x_coords = cloud_df_rescaled['z'], cloud_df_rescaled['y'], cloud_df_rescaled['x']
         
         if mask_shape[0] == 1:
-            in_mask = [vfv_mask[0, int(np.floor(y)), int(np.floor(x))] for y, x in zip(y_coords, x_coords)]
+            in_mask = [vfv_mask[0, int(np.floor(y)-1), int(np.floor(x)-1)] for y, x in zip(y_coords, x_coords)]
         elif mask_shape[1] == 1:
             in_mask = [vfv_mask[int(np.floor(z)), 0, int(np.floor(x))] for z, x in zip(z_coords, x_coords)]
         elif mask_shape[2] == 1:
@@ -309,7 +311,6 @@ def main():
         
         cloud_df = cloud_df[np.array(in_mask, dtype=bool)]
 
-    print("VFV predictions finished, saving results...")
     cloud_df.to_csv(f"{conf.vfv.outdir}/{conf.vfv.name}_cloud.csv", index=False)
 
 
