@@ -139,6 +139,8 @@ class UNet(tf.keras.Model):
                 h = self.dropouts[i_e + i_d](h, training=training)
             
         pred = self.predictor(h, training=training)
+        
+        pred = pred * inputs # prova
         return pred
     
     def get_config(self, ):
