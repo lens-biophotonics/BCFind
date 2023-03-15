@@ -152,7 +152,7 @@ class UNet(tf.keras.Model):
 
         pred = self.predictor(h, training=training)
 
-        pred = pred * inputs  # prova
+        # pred = pred * inputs  # prova
         return pred
 
     def get_config(
