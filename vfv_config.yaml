@@ -14,9 +14,10 @@ VirtualFusedVolume:
 
 # Attn! Should be identical to the training phase! Be aware of any differences: check training config file!
 PreProcessing:
-    clip         : 'bit'  # can be one of ['quantile', 'bit', 'constant', 'auto', 'none']
-    clip_value   : 14
-    center       : null   # cane be one of ['min', 'constant', 'mean', 'none']
+    clip         : 'bit'  # can be one of ['constant', 'bit', 'quantile', 'auto', 'none', null]
+    clip_value   : 15
+    center       : null  # can be one of ['constant', 'min', 'mean', 'none', null]
     center_value : null
-    scale        : 'max'  # can be one of ['max', 'constant', 'std']
-    scale_value  : null
+    scale        : 'bit'  # can be one of ['constant', 'bit', 'max', 'std', 'none', null]
+    scale_value  : 15
+

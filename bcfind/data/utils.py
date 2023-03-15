@@ -44,16 +44,6 @@ def get_gt_as_numpy(marker_path):
     return gt[:, [2, 1, 0]]  # transpose axis from [x, y, z] to [z, y, x]
 
 
-def bit_clip(x, bit=14):
-    clip = 2**bit
-    return np.where(x > clip, clip, x)
-
-
-def windsor_clip(x, quantile=99):
-    q = np.quantile(x, quantile)
-    return np.where(x > q, q, x)
-
-
 def auto_clip(x):
     lof = LocalOutlierFactor(n_neighbors=50, contamination=0.2)
     inl_pred = lof.fit_predict(x.reshape(-1, 1))
@@ -63,52 +53,58 @@ def auto_clip(x):
 
 
 def get_preprocess_func(
-    clip="quantile",
-    clip_value=99,
-    center="min",
-    center_value=None,
-    scale="max",
-    scale_value=None,
+    clip="bit",
+    clip_value=15,
+    center=None,
+    center_value=0,
+    scale="bit",
+    scale_value=15,
 ):
-    if clip not in ["constant", "quantile", "bit", "auto", "none", None]:
+    if clip not in ["constant", "bit", "quantile", "auto", "none", None]:
         raise ValueError(
-            f'clip argument must be on of "constant", "quantile", "bit" or "auto", "none" or None. Got {clip}'
+            f'clip argument must be one of "constant", "bit", "quantile", "auto", "none" or None. Got {clip}'
         )
-    if center not in ["min", "constant", "mean", "none", None]:
+    if center not in ["constant", "min", "mean", "none", None]:
         raise ValueError(
-            f'center argument must be on of "min", "constant", "mean", "none" or None. Got {center}'
+            f'center argument must be on of "constant", "min", "mean", "none" or None. Got {center}'
         )
-    if scale not in ["max", "constant", "std"]:
+    if scale not in ["constant", "bit", "max", "std", "none", None]:
         raise ValueError(
-            f'scale argument must be on of "max", "constant" or "std". Got {scale}'
+            f'scale argument must be on of "constant", "bit", "max", "std", "none" or None. Got {scale}'
         )
 
     if clip == "constant":
         clip_fun = lambda x: np.where(x > clip_value, clip_value, x)
-    elif clip == "quantile":
-        clip_fun = ft.partial(windsor_clip, quantile=clip_value)
     elif clip == "bit":
-        clip_fun = ft.partial(bit_clip, bit=clip_value)
+        clip_fun = lambda x: np.where(x > 2**clip_value, 2**clip_value, x)
+    elif clip == "quantile":
+        clip_fun = lambda x: np.where(
+            x > np.quantile(x, clip_value), np.quantile(x, clip_value), x
+        )
     elif clip == "auto":
         clip_fun = auto_clip
     elif clip in [None, "none"]:
         clip_fun = lambda x: x
 
-    if center == "min":
+    if center == "constant":
+        center_fun = lambda x: x - center_value
+    elif center == "min":
         center_fun = lambda x: x - x.min()
     elif center == "mean":
         center_fun = lambda x: x - x.mean()
-    elif center == "constant":
-        center_fun = lambda x: x - center_value
     elif center in [None, "none"]:
         center_fun = lambda x: x
 
-    if scale == "max":
-        scale_fun = lambda x: x / x.max()
-    elif scale == "constant":
+    if scale == "constant":
         scale_fun = lambda x: x / scale_value
+    elif scale == "bit":
+        scale_fun = lambda x: x / 2**scale_value
+    elif scale == "max":
+        scale_fun = lambda x: x / x.max()
     elif scale == "std":
         scale_fun = lambda x: x / x.std()
+    elif scale in [None, "none"]:
+        scale_fun = lambda x: x
 
     def func(x):
         new_x = clip_fun(x)

@@ -38,12 +38,12 @@ DoG:
 
 
 PreProcessing:
-    clip         : 'constant'  # can be one of ['quantile', 'bit', 'constant', 'auto', 'none']
-    clip_value   : 16384
-    center       : 'none'   # cane be one of ['min', 'constant', 'mean', 'none']
+    clip         : 'bit'  # can be one of ['constant', 'bit', 'quantile', 'auto', 'none', null]
+    clip_value   : 15
+    center       : null  # can be one of ['constant', 'min', 'mean', 'none', null]
     center_value : null
-    scale        : 'constant'  # can be one of ['max', 'constant', 'std']
-    scale_value  : 16384
+    scale        : 'bit'  # can be one of ['constant', 'bit', 'max', 'std', 'none', null]
+    scale_value  : 15
 
 
 DataAugmentation:
