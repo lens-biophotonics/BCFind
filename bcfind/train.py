@@ -12,7 +12,7 @@ from numba import cuda
 from bcfind.config_manager import TrainConfiguration
 from bcfind.data.artificial_targets import get_gt_as_numpy
 from bcfind.models import UNet, SEUNet, ECAUNet, AttentionUNet, MoUNets, predict
-from bcfind.localizers.blob_dog import BlobDoG
+from bcfind.localizers import BlobDoG
 from bcfind.losses import FramedCrossentropy3D
 from bcfind.data import TrainingDataset, get_input_tf
 from bcfind.metrics import Precision, Recall, F1
