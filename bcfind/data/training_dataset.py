@@ -6,9 +6,9 @@ import numpy as np
 import tensorflow as tf
 import concurrent.futures as cf
 
-from bcfind.data.utils import get_input_tf
-from bcfind.data.artificial_targets import get_target_tf
-from bcfind.data.augmentation import random_crop_tf, augment
+from bcfind.utils.data import get_input_tf
+from .artificial_targets import get_target_tf
+from .augmentation import random_crop_tf, augment
 
 
 logger = logging.getLogger(__name__)
@@ -113,8 +113,7 @@ class TrainingDataset(tf.keras.utils.Sequence):
 
             return data.batch(batch_size).prefetch(tf.data.AUTOTUNE)
         else:
-            obj = super(TrainingDataset, cls).__new__(cls)
-            return obj
+            return super(TrainingDataset, cls).__new__(cls)
 
     def __init__(
         self,
@@ -146,8 +145,15 @@ class TrainingDataset(tf.keras.utils.Sequence):
 
         if use_lmdb_data:
             self.lmdb_path = os.path.join(
-                "/", *self.tiff_list[0].split("/")[:-3], "Train_lmdb"
+                *self.tiff_list[0].split("/")[:-3], "Train_lmdb"
             )
+
+            if not os.path.isdir(self.lmdb_path):
+                self.create_lmdb()
+            else:
+                print(
+                    f"Found lmdb data at {self.lmdb_path}. Data will be taken from there"
+                )
 
             # NOTE: hardcoded data shape for lmdb size!
             nbytes = (
@@ -158,17 +164,14 @@ class TrainingDataset(tf.keras.utils.Sequence):
             self.inputs = self.lmdb_env.open_db("Inputs".encode())
             self.targets = self.lmdb_env.open_db("Targets".encode())
 
-            if not os.path.isdir(self.lmdb_path):
-                self.create_lmdb()
-            else:
-                print(
-                    f"Found lmdb data at {self.lmdb_path}. Data will be taken from there"
-                )
-
     def create_lmdb(
         self,
     ):
         print("Creating lmdb data")
+        self.lmdb_env = lmdb.open(self.lmdb_path, map_size=self.map_size, max_dbs=2)
+        self.inputs = self.lmdb_env.open_db("Inputs".encode())
+        self.targets = self.lmdb_env.open_db("Targets".encode())
+
         with self.lmdb_env.begin(write=True) as txn:
             i = 0
             for tiff_file, marker_file in zip(self.tiff_list, self.marker_list):

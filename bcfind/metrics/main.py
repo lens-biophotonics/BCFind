@@ -1,8 +1,9 @@
 import tensorflow as tf
 
-from bcfind.losses.utils import get_mask_fn
+from bcfind.utils.losses import get_mask_fn
 
 
+@tf.keras.utils.register_keras_serializable("BCFind")
 class Recall(tf.keras.metrics.Metric):
     def __init__(self, thresh, target_shape, border_size, from_logits=True, **kwargs):
         super(Recall, self).__init__(**kwargs)
@@ -52,7 +53,18 @@ class Recall(tf.keras.metrics.Metric):
         base_config = super(Recall, self).get_config()
         return dict(list(config.items()) + list(base_config.items()))
 
+    @classmethod
+    def from_config(cls, config):
+        try:
+            return cls(**config)
+        except Exception as e:
+            raise TypeError(
+                f"Error when deserializing class '{cls.__name__}' using "
+                f"config={config}.\n\nException encountered: {e}"
+            )
 
+
+@tf.keras.utils.register_keras_serializable("BCFind")
 class Precision(tf.keras.metrics.Metric):
     def __init__(self, thresh, target_shape, border_size, from_logits=True, **kwargs):
         super(Precision, self).__init__(**kwargs)
@@ -90,9 +102,7 @@ class Precision(tf.keras.metrics.Metric):
         prec = self.tp / (self.tp + self.fp + 1e-4)
         return prec
 
-    def get_config(
-        self,
-    ):
+    def get_config(self):
         config = {
             "border_size": self.border_size,
             "target_shape": self.target_shape,
@@ -102,7 +112,18 @@ class Precision(tf.keras.metrics.Metric):
         base_config = super(Precision, self).get_config()
         return dict(list(config.items()) + list(base_config.items()))
 
+    @classmethod
+    def from_config(cls, config):
+        try:
+            return cls(**config)
+        except Exception as e:
+            raise TypeError(
+                f"Error when deserializing class '{cls.__name__}' using "
+                f"config={config}.\n\nException encountered: {e}"
+            )
 
+
+@tf.keras.utils.register_keras_serializable("BCFind")
 class F1(tf.keras.metrics.Metric):
     def __init__(self, thresh, target_shape, border_size, from_logits=True, **kwargs):
         super(F1, self).__init__(**kwargs)
@@ -157,7 +178,17 @@ class F1(tf.keras.metrics.Metric):
         base_config = super(F1, self).get_config()
         return dict(list(config.items()) + list(base_config.items()))
 
+    @classmethod
+    def from_config(cls, config):
+        try:
+            return cls(**config)
+        except Exception as e:
+            raise TypeError(
+                f"Error when deserializing class '{cls.__name__}' using "
+                f"config={config}.\n\nException encountered: {e}"
+            )
 
-tf.keras.utils.get_custom_objects().update(
-    {"Recall": Recall, "Precision": Precision, "F1": F1}
-)
+
+# tf.keras.utils.get_custom_objects().update(
+#     {"Recall": Recall, "Precision": Precision, "F1": F1}
+# )

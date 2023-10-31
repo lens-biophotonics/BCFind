@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 
-@tf.keras.utils.register_keras_serializable(package="BCFind", name="AttentionGate")
+@tf.keras.utils.register_keras_serializable("BCFind")
 class AttentionGate(tf.keras.layers.Layer):
     def __init__(self, **kwargs):
         super(AttentionGate, self).__init__(**kwargs)

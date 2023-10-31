@@ -13,7 +13,7 @@ import concurrent.futures as cf
 from queue import Queue
 from zetastitcher import VirtualFusedVolume
 
-from bcfind.data.utils import get_preprocess_func
+from bcfind.utils.data import get_preprocess_func
 from bcfind.localizers import BlobDoG
 from bcfind.config_manager import VFVConfiguration
 
@@ -53,7 +53,7 @@ def put_substack_in_q(
         print("Already done! Skipping")
         return
 
-    # VFV mask handling
+    # mask handling
     if vfv_mask is not None:
         print("Handling mask...")
         mask_shape = np.array(vfv_mask.shape)
@@ -101,6 +101,7 @@ def put_substack_in_q(
 def find_cells(img, localizer, outfile=None):
     centers = localizer.predict(img)
     if outfile is not None:
+        print(f"Saving coordinates to {outfile}")
         np.save(outfile, centers)
 
     return centers
@@ -185,7 +186,8 @@ def predict_vfv(
             print(f"DoG prediction on substack {name}")
             cells = find_cells(nn_pred, localizer, outfile)
             embedding_q.task_done()
-            print(cells.shape)
+            if cells.shape[0] > 0:
+                print(f"{cells.shape[0]} cells found.")
 
     # Prepare threads for localizer predictions
     loc_threads = []
@@ -261,7 +263,9 @@ def main():
 
     # Preparing U-Net
     print("Loading UNet and DoG parameters...")
-    unet = tf.keras.models.load_model(f"{conf.unet.checkpoint_dir}/model.tf")
+    unet = tf.keras.models.load_model(
+        f"{conf.unet.checkpoint_dir}/model.tf", compile=False
+    )
     unet.build((None, None, None, None, 1))
 
     # Preparing DoG

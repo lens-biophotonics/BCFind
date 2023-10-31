@@ -1,9 +1,9 @@
-from argparse import ArgumentError
 import SimpleITK as sitk
 import numpy as np
 import tensorflow as tf
 
 from scipy import ndimage
+
 
 rng = np.random.default_rng()
 
@@ -43,7 +43,7 @@ def random_zoom_tf(input, param_range=(1.0, 1.1), order=1):
         elif order == 5:
             interpolator = sitk.sitkBSplineResamplerOrder5
         else:
-            raise ArgumentError("Order of interpolation must be between 0 and 5")
+            raise ValueError("Order of interpolation must be between 0 and 5")
 
         zoom_factor = rng.uniform(param_range[0], param_range[1])
 

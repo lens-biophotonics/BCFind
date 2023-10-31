@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-from bcfind.layers.switch_normalization import SwitchNormalization
-from bcfind.layers.attention_gate import AttentionGate
+from .switch_normalization import SwitchNormalization
+from .attention_gate import AttentionGate
 
 
 @tf.keras.utils.register_keras_serializable(package="BCFind", name="DecoderBlock")

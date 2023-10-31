@@ -1,6 +1,7 @@
 import tensorflow as tf
 
 
+@tf.keras.utils.register_keras_serializable("BCFind")
 class ImportanceLoss(tf.keras.losses.Loss):
     """
     Importance Loss from "Outrageosly Large Neural Networks" by Shazeer et al. (2017)
@@ -11,11 +12,9 @@ class ImportanceLoss(tf.keras.losses.Loss):
         self.alpha = alpha
 
     def call(self, expert_weights):
-        importance = tf.reduce_sum(tf.squeeze(expert_weights), axis=0)
-        return (
-            self.alpha
-            * (tf.math.reduce_std(importance) / tf.reduce_mean(importance)) ** 2
-        )
+        importance = tf.reduce_sum(tf.squeeze(expert_weights), axis=1)
+        cv = tf.math.reduce_std(importance) / tf.reduce_mean(importance)
+        return self.alpha * (cv**2)
 
     def __call__(self, expert_weights):
         return self.call(expert_weights)
@@ -30,6 +29,7 @@ class ImportanceLoss(tf.keras.losses.Loss):
         return config
 
 
+@tf.keras.utils.register_keras_serializable("BCFind")
 class LoadLoss(tf.keras.losses.Loss):
     """
     Load loss from "Switch Transformers" by Fedus et al. (2022)
@@ -37,22 +37,19 @@ class LoadLoss(tf.keras.losses.Loss):
 
     def __init__(self, alpha=0.01, **kwargs):
         super(LoadLoss, self).__init__(**kwargs)
-        self.alpha = alpha
+        self.alpha = tf.cast(alpha, tf.float32)
 
     def call(self, gate_weights):
-        bs, _, _, _, n_exp = gate_weights.shape
-
         gate_weights = tf.squeeze(gate_weights)
 
-        input_choice = tf.argmax(gate_weights, axis=-1)
-        exp_importance = tf.reduce_mean(gate_weights, axis=0)
+        n_exp = tf.cast(tf.shape(gate_weights)[0], tf.float32)
 
-        load = 0
-        for i in range(n_exp):
-            is_best_exp = tf.cast(tf.equal(input_choice, i), tf.float32)
-            best_exp_times = tf.reduce_sum(is_best_exp)
-            exp_samples = best_exp_times / bs if bs is not None else best_exp_times
-            load += exp_importance[i] * exp_samples
+        max_weights = tf.reduce_max(gate_weights, axis=0)
+        input_loaded = tf.reduce_mean(
+            tf.where(gate_weights == max_weights, 1.0, 0.0), axis=1
+        )
+        exp_importance = tf.reduce_mean(gate_weights, axis=1)
+        load = tf.reduce_sum(input_loaded * exp_importance)
 
         return self.alpha * n_exp * load
 
@@ -69,7 +66,7 @@ class LoadLoss(tf.keras.losses.Loss):
         return config
 
 
-@tf.keras.utils.register_keras_serializable(package="BCFind", name="MUMLR")
+@tf.keras.utils.register_keras_serializable("BCFind")
 class MUMLRegularizer(tf.keras.regularizers.Regularizer):
     """
     Correlation regularizer from "Maximal Uncorrelated Multinomial Logistic Regression" by Lei D. et al. (2019)
@@ -90,12 +87,3 @@ class MUMLRegularizer(tf.keras.regularizers.Regularizer):
 
     def get_config(self):
         return {"alpha": float(self.alpha)}
-
-
-tf.keras.utils.get_custom_objects().update(
-    {
-        "ImportanceLoss": ImportanceLoss,
-        "LoadLoss": LoadLoss,
-        "MUMLRegularizer": MUMLRegularizer,
-    }
-)

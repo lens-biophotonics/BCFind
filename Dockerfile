@@ -32,6 +32,7 @@ ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
 ENV PATH="/usr/local/cuda/bin:${PATH}"
 ENV CUPY_ACCELERATORS='cutensor'
 ENV CUPY_CUDA_PER_THREAD_DEFAULT_STREAM=1
+ENV CUPY_CACHE_DIR='/home/.cupy/kernel_cache'
 
 COPY dist/*.whl /home/
 RUN set -ex \

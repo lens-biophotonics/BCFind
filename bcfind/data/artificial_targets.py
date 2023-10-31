@@ -6,8 +6,8 @@ import scipy.spatial.distance as sp_dist
 from pathlib import Path
 from colorama import Fore as FG
 
-from bcfind.utils import iround
-from bcfind.data.utils import get_gt_as_numpy
+from bcfind.utils.base import iround
+from bcfind.utils.data import get_gt_as_numpy
 
 
 def get_target(

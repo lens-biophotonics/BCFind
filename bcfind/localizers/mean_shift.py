@@ -1,17 +1,16 @@
 import joblib
-import pickle
 import numpy as np
 import pandas as pd
 import functools as ft
 import scipy.ndimage as sp_img
 import scipy.spatial as sp_spt
 import sklearn.neighbors as sk_ngbr
-from bcfind.localizers.utils import get_counts_from_bm_eval
+from bcfind.utils.localizers import get_counts_from_bm_eval
 
 from pythreshold.global_th.entropy import kapur_multithreshold
 
-from bcfind.localizers import bipartite_match
-from bcfind.utils import metrics, remove_border_points_from_df
+from .bipartite_match import bipartite_match
+from bcfind.utils.base import remove_border_points_from_df, evaluate_df
 
 
 class SpatialMeanShift:
@@ -67,7 +66,9 @@ class SpatialMeanShift:
         return np.indices(x_shape).transpose(1, 2, 3, 0).reshape(-1, 3)
 
     @staticmethod
-    def _climb_grad(seed, kdtree, bandwidth, coord, intensities, stop_thresh, max_iter):
+    def _climb_grad(
+        seed, kdtree, bandwidth, coord, intensities, stop_thresh, max_iterations
+    ):
         iter = 0
         while True:
             i_nbrs = kdtree.query_ball_point(seed, r=bandwidth)
@@ -81,7 +82,7 @@ class SpatialMeanShift:
             seed = np.average(points_within, axis=0, weights=intensities[i_nbrs])
 
             # If converged or at max_iterations, add the cluster
-            if np.linalg.norm(seed - old_seed) < stop_thresh or iter == max_iter:
+            if np.linalg.norm(seed - old_seed) < stop_thresh or iter == max_iterations:
                 return tuple(seed), len(points_within), sum(intensities[i_nbrs])
             iter += 1
 
@@ -220,7 +221,7 @@ class SpatialMeanShift:
             if evaluation_type == "counts":
                 return eval_counts
             else:
-                return metrics(eval_counts)[evaluation_type]
+                return evaluate_df(eval_counts)[evaluation_type]
 
     def predict_and_evaluate(
         self,
@@ -274,4 +275,4 @@ class SpatialMeanShift:
             if evaluation_type == "counts":
                 return eval_counts
             else:
-                return metrics(eval_counts)[evaluation_type]
+                return evaluate_df(eval_counts)[evaluation_type]

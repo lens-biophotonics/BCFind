@@ -1,8 +1,6 @@
 import tensorflow as tf
 
-from bcfind.layers.encoder_block import EncoderBlock
-from bcfind.layers.decoder_block import DecoderBlock
-from bcfind.layers.squeeze_and_excite import SqueezeAndExcite
+from bcfind.layers import EncoderBlock, DecoderBlock, SqueezeAndExcite
 
 
 class SEUNet(tf.keras.Model):

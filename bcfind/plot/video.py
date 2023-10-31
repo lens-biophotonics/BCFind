@@ -60,8 +60,8 @@ def make_video(
     # Set figure
     ratio = x.shape[plt_axes[1]] / x.shape[plt_axes[0]]
     fig = plt.figure(figsize=(int(8 * ratio), 8))
-    plt.grid(b=True, which="major", color="#4444aa", alpha=0.5)
-    plt.grid(b=True, which="minor", color="#225500", alpha=0.5)
+    plt.grid(visible=True, which="major", color="#4444aa", alpha=0.5)
+    plt.grid(visible=True, which="minor", color="#225500", alpha=0.5)
     plt.axis("off")
 
     img = plt.imshow(

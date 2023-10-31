@@ -10,7 +10,7 @@ def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
 
-def metrics(df):
+def evaluate_df(df):
     # Precision
     den = np.sum(df.TP + df.FP)
     if den != 0.0:

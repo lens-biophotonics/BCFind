@@ -1,9 +1,9 @@
 import tensorflow as tf
 
-from bcfind.layers.switch_normalization import SwitchNormalization
+from .switch_normalization import SwitchNormalization
 
 
-@tf.keras.utils.register_keras_serializable(package="BCFind", name="EncoderBlock")
+@tf.keras.utils.register_keras_serializable("BCFind")
 class EncoderBlock(tf.keras.layers.Layer):
     def __init__(
         self,

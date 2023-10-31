@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 
-@tf.keras.utils.register_keras_serializable(package="BCFind", name="SqueezeAndExcite")
+@tf.keras.utils.register_keras_serializable("BCFind")
 class SqueezeAndExcite(tf.keras.layers.Layer):
     def __init__(self, n_input_channels, squeeze_factor=2, **kwargs):
         super(SqueezeAndExcite, self).__init__(**kwargs)

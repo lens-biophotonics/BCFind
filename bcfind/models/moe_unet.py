@@ -1,15 +1,16 @@
-import numpy as np
 import tensorflow as tf
 
+from .unet import UNet
 from bcfind.layers import EncoderBlock
-from bcfind.models import UNet
-from bcfind.losses import ImportanceLoss, LoadLoss, MUMLRegularizer
+from bcfind.losses import MUMLRegularizer, ImportanceLoss, LoadLoss
 
 
 def _keep_top_k(tensor, k):
-    top_k_values, _ = tf.math.top_k(tensor, k, sorted=True)
+    top_k_values = tf.math.top_k(tensor, k, sorted=True).values
     mask = tensor >= top_k_values[..., -1][..., tf.newaxis]
-    return tf.where(mask, tensor, -np.inf)
+    inf_values = tf.stop_gradient(tf.constant(-float("inf"), dtype=tensor.dtype))
+    masked_tensor = tf.where(mask, tensor, inf_values)
+    return masked_tensor
 
 
 class GateNet(tf.keras.Model):
@@ -41,32 +42,33 @@ class GateNet(tf.keras.Model):
         self.gap = tf.keras.layers.GlobalAveragePooling3D(keepdims=True)
 
         self.w_conv_1 = tf.keras.layers.Conv3D(
-            n_filters * (2**i), kernel_size=1, kernel_initializer="zeros"
+            n_filters * (2**i),
+            kernel_size=1,  # kernel_initializer="zeros"
         )
         self.w_bn = tf.keras.layers.BatchNormalization()
         self.w_relu = tf.keras.layers.Activation("relu")
         self.w_conv_2 = tf.keras.layers.Conv3D(
             n_experts,
             kernel_size=1,
-            kernel_initializer="zeros",
+            # kernel_initializer="zeros",
             kernel_regularizer=MUMLRegularizer(0.05),
         )
+        self.softmax = tf.keras.layers.Activation("softmax")
 
         if self.add_noise:
             self.n_conv_1 = tf.keras.layers.Conv3D(
-                n_filters * (2**i), kernel_size=1, kernel_initializer="zeros"
+                n_filters * (2**i),
+                kernel_size=1,  # kernel_initializer="zeros"
             )
             self.n_bn = tf.keras.layers.BatchNormalization()
             self.n_relu = tf.keras.layers.Activation("relu")
             self.n_conv_2 = tf.keras.layers.Conv3D(
                 n_experts,
                 kernel_size=1,
-                kernel_initializer="zeros",
-                kernel_regularizer=MUMLRegularizer(0.05),
+                # kernel_initializer="zeros",
+                # kernel_regularizer=MUMLRegularizer(0.05),
                 activation="softplus",
             )
-
-        self.softmax = tf.keras.layers.Activation("softmax")
 
     def call(self, inputs, training=None):
         h = self.encoder_blocks[0](inputs)
@@ -92,8 +94,12 @@ class GateNet(tf.keras.Model):
         if self.keep_top_k:
             weights = _keep_top_k(weights, self.keep_top_k)
 
+        # BS x 1 x 1 x 1 x NE
         weights = self.softmax(weights)
-        return weights
+        # NE x BS x 1 x 1 x 1
+        weights = tf.transpose(weights, (4, 0, 1, 2, 3))
+        # NE x BS x 1 x 1 x 1 x 1
+        return weights[..., None]
 
     def get_config(
         self,
@@ -191,7 +197,7 @@ class MoUNets(tf.keras.Model):
 
         self.experts = []
         for _ in range(self.n_experts):
-            unet = UNet(
+            expert = UNet(
                 self.n_blocks,
                 self.n_filters,
                 self.k_size,
@@ -199,35 +205,43 @@ class MoUNets(tf.keras.Model):
                 self.dropout,
                 self.regularizer,
             )
-            self.experts.append(unet)
+            self.experts.append(expert)
 
         if self.balance_loss == "importance":
-            self.gate_loss = ImportanceLoss(0.2)
+            self.gate_loss = ImportanceLoss(500.0)
         elif self.balance_loss == "load":
-            self.gate_loss = LoadLoss(0.01)
+            self.gate_loss = LoadLoss(80.0)
 
     def call(self, inputs, training=None):
+        # NE x BS x 1 x 1 x 1 x 1
         expert_weights = self.gate(inputs, training=training)
 
-        expert_outputs = []
-        for i in range(len(self.experts)):
-            expert_outputs.append(self.experts[i](inputs, training=training))
+        expert_outputs = tf.TensorArray(tf.float32, size=self.n_experts)
+        for i, expert in enumerate(self.experts):
+            out_exp_i = expert(inputs, training=training)
+            expert_outputs = expert_outputs.write(i, out_exp_i)
+
+        # NE x BS x D x H x W x C
+        expert_outputs = expert_outputs.stack()
 
         if training:
             return expert_weights, expert_outputs
         else:
-            expert_outputs = tf.concat(expert_outputs, axis=-1)
-            outputs = tf.reduce_sum(expert_outputs * expert_weights, axis=-1)
-            return tf.expand_dims(outputs, -1)
+            # BS x D x H x W x C
+            outputs = tf.reduce_sum(
+                expert_outputs * expert_weights,
+                axis=0,
+            )
+            return outputs
 
-    def compute_loss(self, x=None, y=None, y_pred=None, sample_weight=None):
+    def compute_loss(self, y_true=None, y_pred=None, x=None, sample_weight=None):
         weights, y_pred = y_pred
 
         if self.balance_loss in ["importance", "load"]:
             g_loss = self.gate_loss(weights)
 
         weights = tf.squeeze(weights)
-        loss = tf.zeros_like(weights[:, 0])
+        loss = tf.zeros(tf.shape(weights)[1])  # bs
 
         # weighted crossentropy loss
         # for i in range(self.n_experts):
@@ -236,15 +250,67 @@ class MoUNets(tf.keras.Model):
 
         # weighted loss as Jacobs et al. (1991)
         for i in range(self.n_experts):
-            exp_loss = self.compiled_loss(y, y_pred[i])
+            exp_loss = self.compiled_loss(y_true, y_pred[i])
             exp_loss = tf.exp(-0.5 * exp_loss)
-            loss += exp_loss * weights[..., i]
+            loss += exp_loss * weights[i]
         loss = -tf.math.log(loss)
 
+        loss = tf.reduce_mean(loss, axis=0)
+
         if self.balance_loss in ["importance", "load"]:
-            return tf.reduce_mean(loss, axis=0) + g_loss
+            return loss + g_loss
         else:
-            return tf.reduce_mean(loss, axis=0)
+            return loss
+
+    @tf.function(
+        reduce_retracing=True,
+        input_signature=[
+            (
+                tf.TensorSpec((None, None, None, None, 1), dtype=tf.float32),
+                tf.TensorSpec((None, None, None, None, 1), dtype=tf.float32),
+            ),
+        ],
+    )
+    def train_step(self, data):
+        x, y = data
+
+        with tf.GradientTape() as tape:
+            y_pred = self(x, training=True)
+            loss = self.compute_loss(y_true=y, y_pred=y_pred)
+
+        grads = tape.gradient(loss, self.trainable_weights)
+        self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+
+        for metric in self.metrics:
+            if metric.name == "loss":
+                metric.update_state(loss)
+            else:
+                weights, exp_out = y_pred
+                y_pred = tf.reduce_sum(exp_out * weights, axis=0)
+                metric.update_state(y, y_pred)
+        return {m.name: m.result() for m in self.metrics}
+
+    def test_step(self, data):
+        x, y = data
+        y_pred = self(x, training=False)
+        loss = self.compiled_loss(y, y_pred)
+        loss = tf.reduce_mean(loss, axis=0)
+        # y_pred = self(x, training=True)
+        # loss = self.compute_loss(y_true=y, y_pred=y_pred)
+
+        for metric in self.metrics:
+            if metric.name == "loss":
+                metric.update_state(loss)
+            else:
+                metric.update_state(y, y_pred)
+                # weights, exp_out = y_pred
+                # y_pred = tf.reduce_sum(exp_out * weights, axis=0)
+                # metric.update_state(y, y_pred)
+        return {m.name: m.result() for m in self.metrics}
+
+    @property
+    def metrics(self):
+        return super(MoUNets, self).metrics
 
     def get_config(
         self,

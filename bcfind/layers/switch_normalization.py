@@ -1,16 +1,12 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Layer, BatchNormalization, InputSpec
+from tensorflow.keras.layers import Layer, InputSpec
 from tensorflow.keras import initializers
 from tensorflow.keras import regularizers
 from tensorflow.keras import constraints
 from tensorflow.keras import backend as K
 
-from tensorflow.keras.utils import get_custom_objects
 
-
-@tf.keras.utils.register_keras_serializable(
-    package="BCFind", name="SwitchNormalization"
-)
+@tf.keras.utils.register_keras_serializable("BCFind")
 class SwitchNormalization(Layer):
     """Switchable Normalization layer
     Switch Normalization performs Instance Normalization, Layer Normalization and Batch

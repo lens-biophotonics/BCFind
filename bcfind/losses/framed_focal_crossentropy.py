@@ -1,12 +1,10 @@
 import tensorflow as tf
 
-from bcfind.losses import DiceLoss
-from bcfind.losses.utils import get_mask_fn
+from .dice_loss import DiceLoss
+from bcfind.utils.losses import get_mask_fn
 
 
-@tf.keras.utils.register_keras_serializable(
-    package="BCFind", name="FramedFocalCrossentropy3D"
-)
+@tf.keras.utils.register_keras_serializable("BCFind")
 class FramedFocalCrossentropy3D(tf.keras.losses.Loss):
     """
     Implementation of binary focal crossentropy loss for 3D images where the predictions
@@ -74,8 +72,3 @@ class FramedFocalCrossentropy3D(tf.keras.losses.Loss):
         }
         base_config = super(FramedFocalCrossentropy3D, self).get_config()
         return dict(list(config.items()) + list(base_config.items()))
-
-
-tf.keras.utils.get_custom_objects().update(
-    {"FramedFocalCrossentropy3D": FramedFocalCrossentropy3D}
-)

@@ -1,7 +1,6 @@
 import tensorflow as tf
 
-from bcfind.layers.encoder_block import EncoderBlock
-from bcfind.layers.decoder_block import DecoderBlock
+from bcfind.layers import DecoderBlock, EncoderBlock
 
 
 class AttentionUNet(tf.keras.Model):

@@ -10,11 +10,10 @@ import tensorflow as tf
 from numba import cuda
 
 from bcfind.config_manager import TrainConfiguration
-from bcfind.data.utils import get_gt_as_numpy
 from bcfind.localizers import BlobDoG
-from bcfind.utils import metrics
-from bcfind.data import get_input_tf
-from bcfind.models import predict
+from bcfind.utils.data import get_gt_as_numpy, get_input_tf
+from bcfind.utils.base import evaluate_df
+from bcfind.utils.models import predict
 
 
 def parse_args():
@@ -42,7 +41,6 @@ def main():
     args = parse_args()
 
     gpus = tf.config.list_physical_devices("GPU")
-    print(gpus)
     tf.config.set_visible_devices(gpus[args.gpu], "GPU")
     tf.config.experimental.set_memory_growth(gpus[args.gpu], True)
 
@@ -64,7 +62,11 @@ def main():
     ####################################
     ############ LOAD UNET #############
     ####################################
-    unet = tf.keras.models.load_model(f"{conf.unet.checkpoint_dir}/model.tf")
+    unet = tf.keras.models.load_model(
+        f"{conf.unet.checkpoint_dir}/model.tf",
+        # custom_objects=custom_objects,
+        compile=False,
+    )
     unet.build((None, None, None, None, 1))
 
     ###########################################
@@ -87,7 +89,7 @@ def main():
 
     with db.begin(write=True) as fx:
         for i, tiff_file in enumerate(tiff_list):
-            print(f"Unet prediction on file {i+1}/{len(tiff_list)}")
+            print(f"\nUnet prediction on file {i+1}/{len(tiff_list)}")
 
             x = get_input_tf(tiff_file, **conf.preproc)
             pred = predict(x, unet).numpy()
@@ -104,7 +106,7 @@ def main():
     ##########################################
     print(f"\n DoG predictions and evaluation on test-set")
 
-    db = lmdb.open(f"{conf.exp.basepath}/Test_pred_lmdb")
+    db = lmdb.open(f"{conf.exp.basepath}/Test_pred_lmdb", readonly=True)
 
     dog = BlobDoG(3, conf.data.dim_resolution, conf.dog.exclude_border)
     dog_par = json.load(open(f"{conf.dog.checkpoint_dir}/BlobDoG_parameters.json", "r"))
@@ -112,21 +114,19 @@ def main():
     print(f"Best parameters found for DoG: {dog_par}")
 
     with db.begin() as fx:
+        db_iterator = fx.cursor()
         res = []
-        for i, file_path in enumerate(tiff_list):
-            fname = file_path.split("/")[-1]
-            x = fx.get(fname.encode())
-
+        for i, (fname, x) in enumerate(db_iterator):
             pred = dog.predict_and_evaluate(x, Y[i], conf.dog.max_match_dist, "counts")
 
             pred["f1"] = pred["TP"] / (pred["TP"] + 0.5 * (pred["FP"] + pred["FN"]))
-            pred["file"] = fname
+            pred["file"] = fname.decode()
             res.append(pred)
     db.close()
 
     res = pd.concat(res)
     res.to_csv(f"{conf.exp.basepath}/Test_eval.csv", index=False)
-    perf = metrics(res)
+    perf = evaluate_df(res)
 
     print(f"\n Test-set evaluated with {perf}")
     print("")

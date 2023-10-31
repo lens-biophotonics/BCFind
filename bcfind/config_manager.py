@@ -30,14 +30,13 @@ class TrainConfiguration:
                 pass
 
         # Dataset
-        if self.data:
-            self.data.shape = np.array(self.data.shape)
-            self.data.dim_resolution = np.array(self.data.dim_resolution)
+        self.data.shape = np.array(self.data.shape)
+        self.data.dim_resolution = np.array(self.data.dim_resolution)
 
-            self.data.train_tif_dir = f"{self.data.basepath}/Tiff_files/Train"
-            self.data.train_gt_dir = f"{self.data.basepath}/GT_files/Train"
-            self.data.test_tif_dir = f"{self.data.basepath}/Tiff_files/Test"
-            self.data.test_gt_dir = f"{self.data.basepath}/GT_files/Test"
+        self.data.train_tif_dir = f"{self.data.basepath}/Tiff_files/Train"
+        self.data.train_gt_dir = f"{self.data.basepath}/GT_files/Train"
+        self.data.test_tif_dir = f"{self.data.basepath}/Tiff_files/Test"
+        self.data.test_gt_dir = f"{self.data.basepath}/GT_files/Test"
 
         # Experiment
         self.exp.basepath = f"{self.exp.basepath}/{self.exp.name}"

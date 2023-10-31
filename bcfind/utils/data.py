@@ -59,6 +59,7 @@ def get_preprocess_func(
     center_value=0,
     scale="bit",
     scale_value=15,
+    slice_p=None,
 ):
     if clip not in ["constant", "bit", "quantile", "auto", "none", None]:
         raise ValueError(
@@ -121,6 +122,26 @@ def get_input_tf(input_file, **kwargs):
         input_file = Path(input_file.decode())
         input_image = InputFile(input_file).whole()
         input_image = input_image.astype(np.float32)
+
+        # ATTN!: hard coded slice norm
+        try:
+            if kwargs["slice_p"] is not None:
+                sl = int(input_file.name.split("_")[1])
+                sl_p = int(kwargs["slice_p"])
+
+                print(f"Using percentiles_{sl_p:02}.json for slice norm")
+                lomin, himax = json.load(
+                    open(
+                        f"/home/Data/I48_slab{sl:02}/NeuN638/percentiles_{sl_p:02}.json"
+                    )
+                ).values()
+                input_image = np.where(input_image > himax, himax, input_image)
+                input_image = input_image - lomin
+                input_image = np.where(input_image < 0, 0, input_image)
+                input_image = input_image / (himax - lomin)
+        except:
+            pass
+
         preprocess_func = get_preprocess_func(**kwargs)
         return preprocess_func(input_image)
 

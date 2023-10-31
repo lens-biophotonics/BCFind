@@ -6,7 +6,7 @@ def predict(input, model):
     if tf.rank(input) == 3:
         input = input[tf.newaxis, ..., tf.newaxis]
 
-    I, J = 4, 4
+    I, J = 8, 8
     for i, j in itertools.product(range(I), range(J)):
         if i == 0 and j == 0:
             x = tf.identity(input)
@@ -20,7 +20,13 @@ def predict(input, model):
             x = tf.slice(
                 input,
                 [0, 0, 0, 0, 0],
-                size=[1, input.shape[1] - j, input.shape[2] - i, input.shape[3] - i, 1],
+                size=[
+                    input.shape[0],
+                    input.shape[1] - j,
+                    input.shape[2] - i,
+                    input.shape[3] - i,
+                    input.shape[4],
+                ],
             )
 
             if i == I - 1 and j == J - 1:

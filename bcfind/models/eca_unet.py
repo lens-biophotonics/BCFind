@@ -1,11 +1,7 @@
 import tensorflow as tf
 
-from bcfind.layers.encoder_block import EncoderBlock
-from bcfind.layers.decoder_block import DecoderBlock
-from bcfind.layers.efficient_channel_attention import (
-    EfficientChannelAttention,
-    _get_eca_kernel_size,
-)
+from bcfind.layers import DecoderBlock, EncoderBlock, EfficientChannelAttention
+from bcfind.layers.efficient_channel_attention import _get_eca_kernel_size
 
 
 class ECAUNet(tf.keras.Model):
