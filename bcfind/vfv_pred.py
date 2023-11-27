@@ -259,7 +259,9 @@ def main():
     try:
         shutil.copy(args.config, conf.vfv.outdir)
     except shutil.SameFileError:
-        pass
+        fname = args.config.split("/")[-1]
+        os.path.remove(f"{conf.vfv.outdir}/{fname}")
+        shutil.copy(args.config, conf.vfv.outdir)
 
     # Preparing U-Net
     print("Loading UNet and DoG parameters...")
