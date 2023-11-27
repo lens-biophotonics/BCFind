@@ -48,12 +48,21 @@ class UNet(tf.keras.Model):
         self.regularizer = regularizer
         self.mult_skip = mult_skip
 
+        self.conv_block_1 = EncoderBlock(
+            n_filters=self.n_filters,
+            k_size=self.k_size,
+            k_stride=(1, 1, 1),
+            regularizer=self.regularizer,
+            normalization="batch",
+            activation="relu",
+        )
+
         # Encoder
         self.encoder_blocks = []
         for i in range(self.n_blocks):
             if i >= self.n_blocks - 2:  # last two blocks have no stride
                 encoder_block = EncoderBlock(
-                    n_filters=self.n_filters * (2**i),
+                    n_filters=self.n_filters * (2 ** (i + 1)),
                     k_size=self.k_size,
                     k_stride=(1, 1, 1),
                     regularizer=self.regularizer,
@@ -62,7 +71,7 @@ class UNet(tf.keras.Model):
                 )
             else:
                 encoder_block = EncoderBlock(
-                    n_filters=self.n_filters * (2**i),
+                    n_filters=self.n_filters * (2 ** (i + 1)),
                     k_size=self.k_size,
                     k_stride=self.k_stride,
                     regularizer=self.regularizer,
@@ -77,31 +86,21 @@ class UNet(tf.keras.Model):
         for i in range(self.n_blocks):
             if i < 2:  # first two blocks have no stride
                 decoder_block = DecoderBlock(
-                    n_filters=self.n_filters * (2 ** (self.n_blocks - i - 2)),
+                    n_filters=self.n_filters * (2 ** (self.n_blocks - i - 1)),
                     k_size=self.k_size,
                     k_stride=(1, 1, 1),
                     regularizer=self.regularizer,
                     normalization="batch",
                     activation="relu",
                 )
-            elif i < self.n_blocks - 1:
+            else:
                 decoder_block = DecoderBlock(
-                    n_filters=self.n_filters * (2 ** (self.n_blocks - i - 2)),
+                    n_filters=self.n_filters * (2 ** (self.n_blocks - i - 1)),
                     k_size=self.k_size,
                     k_stride=self.k_stride,
                     regularizer=self.regularizer,
                     normalization="batch",
                     activation="relu",
-                )
-            elif (
-                i == self.n_blocks - 1
-            ):  # last block have only one filter and no regularization
-                decoder_block = DecoderBlock(
-                    n_filters=1,
-                    k_size=self.k_size,
-                    k_stride=self.k_stride,
-                    regularizer=None,
-                    normalization="batch",
                 )
 
             self.decoder_blocks.append(decoder_block)
@@ -128,6 +127,8 @@ class UNet(tf.keras.Model):
         )
 
     def call(self, inputs, training=None):
+        h0 = self.conv_block_1(inputs)
+
         encodings = []
         for i_e, encoder_block in enumerate(self.encoder_blocks):
             if i_e == 0:
@@ -146,7 +147,7 @@ class UNet(tf.keras.Model):
             elif i_d < self.n_blocks - 1:
                 h = decoder_block(h, encodings[-i_d - 2], training=training)
             elif i_d == self.n_blocks - 1:
-                h = decoder_block(h, inputs, training=training)
+                h = decoder_block(h, h0, training=training)
 
             if self.dropout:
                 h = self.dropouts[i_e + i_d](h, training=training)
