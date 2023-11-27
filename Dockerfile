@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.2.0-cudnn8-devel-ubuntu20.04 AS base
+FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 AS base
 
 RUN set -ex \
     && apt-get update \ 
@@ -36,5 +36,5 @@ ENV CUPY_CACHE_DIR='/home/.cupy/kernel_cache'
 
 COPY dist/*.whl /home/
 RUN set -ex \
-    && pip3 install *.whl \
+    && pip3 install *.whl --user\
     && rm *.whl
