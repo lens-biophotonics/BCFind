@@ -1,4 +1,6 @@
 cupy-cuda11x[all]
+numba
+colorama
 lmdb
 matplotlib
 networkx
