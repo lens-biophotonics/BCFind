@@ -29,8 +29,8 @@ class SEUNet(tf.keras.Model):
             stride for the convolutional layers. The last two encoding and the first two decoding layers will however have no stride.
         squeeze_factor: int
             channel reduction factor in the squeeze module, by default 2.
-        dropout : bool, optional
-            whether or not to add dropout layer after each convolutional block, by default None.
+        dropout : float, optional
+            dropout rate to add after each convolutional block, by default None.
         regularizer : string or tf.keras.regularizers, optional
             a regularization method for keras layers, by default None.
         """
@@ -43,13 +43,24 @@ class SEUNet(tf.keras.Model):
         self.dropout = dropout
         self.regularizer = regularizer
 
+        # Input channel expansion
+        self.conv_block_1 = EncoderBlock(
+            n_filters=self.n_filters,
+            k_size=self.k_size,
+            k_stride=(1, 1, 1),
+            regularizer=self.regularizer,
+            normalization="batch",
+            activation="relu",
+        )
+        self.se_1 = SqueezeAndExcite(self.n_filters, self.squeeze_factor)
+
         # Encoder
         self.encoder_blocks = []
         self.encoder_se = []
         for i in range(self.n_blocks):
             if i >= self.n_blocks - 2:  # last two blocks have no stride
                 encoder_block = EncoderBlock(
-                    n_filters=self.n_filters * (2**i),
+                    n_filters=self.n_filters * (2 ** (i + 1)),
                     k_size=self.k_size,
                     k_stride=(1, 1, 1),
                     regularizer=self.regularizer,
@@ -58,7 +69,7 @@ class SEUNet(tf.keras.Model):
                 )
             else:
                 encoder_block = EncoderBlock(
-                    n_filters=self.n_filters * (2**i),
+                    n_filters=self.n_filters * (2 ** (i + 1)),
                     k_size=self.k_size,
                     k_stride=self.k_stride,
                     regularizer=self.regularizer,
@@ -66,7 +77,7 @@ class SEUNet(tf.keras.Model):
                     activation="relu",
                 )
 
-            se = SqueezeAndExcite(self.n_filters * (2**i), self.squeeze_factor)
+            se = SqueezeAndExcite(self.n_filters * (2 ** (i + 1)), self.squeeze_factor)
 
             self.encoder_blocks.append(encoder_block)
             self.encoder_se.append(se)
@@ -77,40 +88,28 @@ class SEUNet(tf.keras.Model):
         for i in range(self.n_blocks):
             if i < 2:  # first two blocks have no stride
                 decoder_block = DecoderBlock(
-                    n_filters=self.n_filters * (2 ** (self.n_blocks - i - 2)),
+                    n_filters=self.n_filters * (2 ** (self.n_blocks - i - 1)),
                     k_size=self.k_size,
                     k_stride=(1, 1, 1),
                     regularizer=self.regularizer,
                     normalization="batch",
                     activation="relu",
                 )
-            elif i < self.n_blocks - 1:
+            else:
                 decoder_block = DecoderBlock(
-                    n_filters=self.n_filters * (2 ** (self.n_blocks - i - 2)),
+                    n_filters=self.n_filters * (2 ** (self.n_blocks - i - 1)),
                     k_size=self.k_size,
                     k_stride=self.k_stride,
                     regularizer=self.regularizer,
                     normalization="batch",
                     activation="relu",
                 )
-            elif (
-                i == self.n_blocks - 1
-            ):  # last block have only one filter and no regularization
-                decoder_block = DecoderBlock(
-                    n_filters=1,
-                    k_size=self.k_size,
-                    k_stride=self.k_stride,
-                    regularizer=None,
-                    normalization="batch",
-                )
 
-            if i < self.n_blocks - 1:  # last block has no SE module
-                se = SqueezeAndExcite(
-                    self.n_filters * (2 ** (self.n_blocks - i - 2)) * 2,
-                    self.squeeze_factor,
-                )
-                self.decoder_se.append(se)
-
+            se = SqueezeAndExcite(
+                self.n_filters * (2 ** (self.n_blocks - i - 1)) * 2,
+                self.squeeze_factor,
+            )
+            self.decoder_se.append(se)
             self.decoder_blocks.append(decoder_block)
 
         # Maybe dropout layers
@@ -135,10 +134,13 @@ class SEUNet(tf.keras.Model):
         )
 
     def call(self, inputs, training=None):
+        h0 = self.conv_block_1(inputs)
+        h0 = self.se_1(h0)
+
         encodings = []
         for i_e in range(len(self.encoder_blocks)):
             if i_e == 0:
-                h = self.encoder_blocks[i_e](inputs, training=training)
+                h = self.encoder_blocks[i_e](h0, training=training)
             else:
                 h = self.encoder_blocks[i_e](h, training=training)
 
@@ -159,7 +161,7 @@ class SEUNet(tf.keras.Model):
                 h = self.decoder_blocks[i_d](h, encodings[-i_d - 2], training=training)
                 h = self.decoder_se[i_d](h)
             elif i_d == self.n_blocks - 1:
-                h = self.decoder_blocks[i_d](h, inputs, training=training)
+                h = self.decoder_blocks[i_d](h, h0, training=training)
 
             if self.dropout:
                 h = self.dropouts[i_e + i_d](h, training=training)

@@ -19,7 +19,6 @@ class UNet(tf.keras.Model):
         k_stride,
         dropout=None,
         regularizer=None,
-        mult_skip=False,
         **kwargs
     ):
         """Constructor method.
@@ -46,8 +45,8 @@ class UNet(tf.keras.Model):
         self.k_stride = k_stride
         self.dropout = dropout
         self.regularizer = regularizer
-        self.mult_skip = mult_skip
 
+        # Input channel expansion
         self.conv_block_1 = EncoderBlock(
             n_filters=self.n_filters,
             k_size=self.k_size,
@@ -132,7 +131,7 @@ class UNet(tf.keras.Model):
         encodings = []
         for i_e, encoder_block in enumerate(self.encoder_blocks):
             if i_e == 0:
-                h = encoder_block(inputs, training=training)
+                h = encoder_block(h0, training=training)
             else:
                 h = encoder_block(h, training=training)
 
@@ -154,8 +153,6 @@ class UNet(tf.keras.Model):
 
         pred = self.predictor(h, training=training)
 
-        if self.mult_skip:
-            pred = pred * inputs  # prova
         return pred
 
     def get_config(
@@ -170,7 +167,6 @@ class UNet(tf.keras.Model):
                 "k_stride": self.k_stride,
                 "dropout": self.dropout,
                 "regularizer": self.regularizer,
-                "mult_skip": self.mult_skip,
             }
         )
         return config

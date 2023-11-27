@@ -19,7 +19,6 @@ class ResUNet(tf.keras.Model):
         k_stride,
         dropout=None,
         regularizer=None,
-        mult_skip=False,
         **kwargs
     ):
         """Constructor method.
@@ -46,7 +45,6 @@ class ResUNet(tf.keras.Model):
         self.k_stride = k_stride
         self.dropout = dropout
         self.regularizer = regularizer
-        self.mult_skip = mult_skip
 
         # Inputs channel expansion
         self.channel_expansion = tf.keras.layers.Conv3D(
@@ -174,8 +172,6 @@ class ResUNet(tf.keras.Model):
         pred = self.pred_conv(h, training=training)
         # pred = self.predictor(h, training=training)
 
-        if self.mult_skip:
-            pred = pred * inputs  # prova
         return pred
 
     def get_config(
@@ -190,28 +186,6 @@ class ResUNet(tf.keras.Model):
                 "k_stride": self.k_stride,
                 "dropout": self.dropout,
                 "regularizer": self.regularizer,
-                "mult_skip": self.mult_skip,
             }
         )
         return config
-
-
-if __name__ == "__main__":
-    unet = ResUNet(4, 32, 3, 2)
-    unet.build((None, None, None, None, 1))
-    unet.summary()
-
-    x = tf.random.normal((4, 48, 48, 48, 1))
-    pred = unet(x, training=False)
-    print(pred.shape)
-
-    unet.save("prova.tf")
-    del unet
-
-    unet = tf.keras.models.load_model("prova.tf")
-    unet.build((None, None, None, None, 1))
-    unet.summary()
-
-    x = tf.random.normal((4, 48, 96, 96, 1))
-    pred = unet(x, training=False)
-    print(pred.shape)
