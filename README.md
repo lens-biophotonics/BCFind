@@ -6,13 +6,13 @@ BCfind (acronym for Brain Cell Finder) is a tool for brain cell localization fro
 
 First build the wheel:
 
-```console
+```shell
 user@local:/path/to/BCFind2.1$ python setup.py bdist_wheel
 ```
 
 Then install the wheel with pip:
 
-```console
+```shell
 user@local:/path/to/BCFind2.1$ pip install dist/bcfind-2.1.0-py3-none-any.whl
 ```
 
@@ -20,7 +20,7 @@ user@local:/path/to/BCFind2.1$ pip install dist/bcfind-2.1.0-py3-none-any.whl
 
 Once the wheel has been build:
 
-```console
+```shell
 user@local:/path/to/BCFind2.1$ docker build -t bcfind:your_tag .
 ```
 
@@ -28,19 +28,19 @@ user@local:/path/to/BCFind2.1$ docker build -t bcfind:your_tag .
 
 Retag the image to the registry on `atlante.lens.unifi.it`:
 
-```console
+```shell
 docker image tag bcfind:your_tag atlante.lens.unifi.it:5000/bcfind:your_tag
 ```
 
 To push the image a VPN connection with atlante is needed, so on a new terminal run the following:
 
-```console
+```shell
 sshuttle -r user@atlante.lens.unifi.it atlante.lens.unifi.it:5000
 ```
 
 Then you can push the image to the atlante registry:
 
-```console
+```shell
 docker push atlante.lens.unifi.it:5000/bcfind:your_tag
 ```
 
@@ -51,124 +51,118 @@ Here the layout:
 
 ```yaml
 Dataset:
-    name           : 'my_data'
-    basepath       : '/path/to/data/folders'
-    shape          : [160, 480, 480]
-    dim_resolution : [2., .65, .65]
-    cell_radius    : [3, 9, 9] # in pixels, for border exclusion
-
+    name: "my_data"
+    basepath: "/path/to/data/folders"
+    shape: [160, 480, 480]
+    dim_resolution: [2., .65, .65]
+    cell_radius: [3, 9, 9] # in pixels, for border exclusion
 
 Experiment:
-    name           : 'my_exp'
-    basepath       : '/path/to/experiment/outputs'
-
+    name: "my_exp"
+    basepath: "/path/to/experiment/outputs"
 
 UNet:
-    model             : 'unet' # can be one of ['unet', 'se-unet', 'eca-unet', 'attention-unet', 'moe-unet']
-    input_shape       : [80, 240, 240]
-    epochs            : 4000
-    batch_size        : 10
-    learning_rate     : 0.001
-    n_blocks          : 4
-    n_filters         : 32
-    k_size            : !!python/tuple [3, 5, 5]
-    k_stride          : !!python/tuple [2, 2, 2]
-    dropout           : 0.1
-    regularizer       : {'l2': 0.0001}
-    
-    squeeze_factor    : 2       # only used if model == 'se-unet'
-    moe_n_experts     : 5       # only used if model == 'moe-unet'
-    moe_top_k_experts : null    # only used if model == 'moe-unet'
-    moe_noise         : true    # only used if model == 'moe-unet'
-    moe_balance_loss  : 'load'  # only used if model == 'moe-unet'
+    model: "unet" # can be one of ['unet', 'se-unet', 'eca-unet', 'attention-unet', 'moe-unet']
+    input_shape: [80, 240, 240]
+    epochs: 4000
+    batch_size: 10
+    learning_rate: 0.001
+    n_blocks: 4
+    n_filters: 32
+    k_size: !!python/tuple [3, 5, 5]
+    k_stride: !!python/tuple [2, 2, 2]
+    dropout: 0.1
+    regularizer: { "l2": 0.0001 }
 
+    squeeze_factor: 2 # only used if model == 'se-unet'
+    moe_n_experts: 5 # only used if model == 'moe-unet'
+    moe_top_k_experts: null # only used if model == 'moe-unet'
+    moe_noise: true # only used if model == 'moe-unet'
+    moe_balance_loss: "load" # only used if model == 'moe-unet'
 
 DoG:
-    iterations     : 40
-    max_match_dist : 10  # same scale as given by dim_resolution
-    n_cpu          : 5
-
+    iterations: 40
+    max_match_dist: 10 # same scale as given by dim_resolution
+    n_cpu: 5
 
 PreProcessing:
-    clip         : 'bit'  # can be one of ['constant', 'bit', 'quantile', 'auto', 'none', null]
-    clip_value   : 14
-    center       : null   # can be one of ['constant', 'min', 'mean', 'none', null]
-    center_value : null
-    scale        : 'bit'  # can be one of ['constant', 'bit', 'max', 'std', 'none', null]
-    scale_value  : 14
-
+    clip: "bit" # can be one of ['constant', 'bit', 'quantile', 'auto', 'none', null]
+    clip_value: 14
+    center: null # can be one of ['constant', 'min', 'mean', 'none', null]
+    center_value: null
+    scale: "bit" # can be one of ['constant', 'bit', 'max', 'std', 'none', null]
+    scale_value: 14
 
 DataAugmentation:
-    augment             : false
-    
-    gamma: 
-        param_range     : [0.9, 1.1]
-        p               : 0.3
-    # contrast: 
+    augment: false
+
+    gamma:
+        param_range: [0.9, 1.1]
+        p: 0.3
+    # contrast:
     #     param_range     : [1., 3.]
-    brightness: 
-        param_range     : [-0.06, 0.06]
-        p               : 0.3
+    brightness:
+        param_range: [-0.06, 0.06]
+        p: 0.3
     # zoom:
     #     param_range     : [1.0, 1.1]
     #     order           : 1
     #     p               : 0.3
     blur:
-        param_range     : [0., 0.3]
-        p               : 0.3
+        param_range: [0., 0.3]
+        p: 0.3
     noise:
-        param_range     : [0., 0.03]
-        p               : 0.3
+        param_range: [0., 0.03]
+        p: 0.3
     # rotation:
     #     param_range     : [0., 270.]
     #     axes            : [-2, -1]
     #     p               : 0.3
     flip:
-        axes            : [-2]
-        p               : 0.3
-
+        axes: [-2]
+        p: 0.3
 ```
 
 `Dataset.basepath` must have the following sub-directories:
 
-- `GT_files/Train`
-- `GT_files/Test`
-- `Tiff_files/Train`
-- `Tiff_files/Test`
+-   `GT_files/Train`
+-   `GT_files/Test`
+-   `Tiff_files/Train`
+-   `Tiff_files/Test`
 
 While `Experiment.basepath` does not need any particular structure, it is the path to the main folder where all the outputs of the experiment will be saved: the U-Net and DoG checkpoints, the tensorboard folders and the final predictions on the train and test sets.
 It will contain the following folders:
 
-- `UNet_checkpoints`
-- `UNet_tensorboard`
-- `DoG_checkpoints`
-- `Train_pred_lmdb`
-- `Test_pred_lmdb`
+-   `UNet_checkpoints`
+-   `UNet_tensorboard`
+-   `DoG_checkpoints`
+-   `Train_pred_lmdb`
+-   `Test_pred_lmdb`
 
 ### Train BCFind
 
 If you use the docker image, open a container and run it in interactive mode:
 
-```console
-foo@bar:~$ docker run -it --rm --gpus all -v /volume/to/mount/:/home/ bcfind:your_tag 
+```shell
+foo@bar:~$ docker run -it --rm --gpus all -v /volume/to/mount/:/home/ bcfind:your_tag
 ```
 
 Once inside the docker container or directly on the machine where the bcfind package has been installed, you can start the training with:
 
-```console
+```shell
 foo@bar:~$ bcfind-train /path/to/train_config.yaml
 ```
 
 The above command takes one mandatory argument that is the configuration file and other four optional arguments:
 
-- `--gpu`: (int) select the gpu to use. Default to -1;
-- `--lmdb`: (store true) if your dataset do not fit into memory an lmdb database is created before training to save memory usage. Default to False;
-- `--only-dog`: (store true) train only the Difference of Gaussian from latest UNet checkpoint. Skip the UNet training. Default to False;
-- `--test-as-val`: (store true) test set will be evaluated also during the UNet training. No early-stopping will be however applied. Default to False.
+-   `--gpu`: (int) select the gpu to use. Default to -1;
+-   `--lmdb`: (store true) if your dataset do not fit into memory an lmdb database is created before training to save memory usage. Default to False;
+-   `--only-dog`: (store true) train only the Difference of Gaussian from latest UNet checkpoint. Skip the UNet training. Default to False;
+-   `--test-as-val`: (store true) test set will be evaluated also during the UNet training. No early-stopping will be however applied. Default to False.
 
 ### Evaluate BCFind on test-set
 
-```console
+```shell
 foo@bar:~$ bcfind-test /path/to/train_config.yaml
 ```
 
@@ -176,13 +170,13 @@ foo@bar:~$ bcfind-test /path/to/train_config.yaml
 
 TensorBoard directories can be visualized in any browser by linking your local machine to the remote server with a bridge
 
-```console
+```shell
 user@local:~$ ssh -L 1111:localhost:2222 user@remote.server.it
 ```
 
 Once your are logged into the remote server, type the following:
 
-```console
+```shell
 user@remote:~$ tensorboard --logdir=/path/to/experiment/outputs/UNet_tensorboard --port=2222
 ```
 
@@ -194,31 +188,30 @@ Another file .yaml sets the configurations for the prediction:
 
 ```yaml
 Experiment:
-    name           : 'my_exp'
-    basepath       : '/path/to/experiment/outputs'
+    name: "my_exp"
+    basepath: "/path/to/experiment/outputs"
 
 VirtualFusedVolume:
-    name             : 'vfv_name'
-    config_file      : '/path/to/vfv/stitch.yml'
-    dim_resolution   : [2., .65, .65]
-    patch_shape      : [160, 480, 480]
-    patch_overlap    : [8, 20, 20]  # NOTE: it should be at least two times the diameter of the largest cell
-    mask_path        : '/path/to/mask.tiff'  # can be null
-    outdir           : '/path/to/vfv/predictions/folder'
-
+    name: "vfv_name"
+    config_file: "/path/to/vfv/stitch.yml"
+    dim_resolution: [2., .65, .65]
+    patch_shape: [160, 480, 480]
+    patch_overlap: [8, 20, 20] # NOTE: it should be at least two times the diameter of the largest cell
+    mask_path: "/path/to/mask.tiff" # can be null
+    outdir: "/path/to/vfv/predictions/folder"
 
 # Attn! Should be identical to the training phase! Be aware of any differences: check training config file!
 PreProcessing:
-    clip         : 'bit'  # can be one of ['constant', 'bit', 'quantile', 'auto', 'none', null]
-    clip_value   : 14
-    center       : null   # can be one of ['constant', 'min', 'mean', 'none', null]
-    center_value : null
-    scale        : 'bit'  # can be one of ['constant', 'bit', 'max', 'std', 'none', null]
-    scale_value  : 14
+    clip: "bit" # can be one of ['constant', 'bit', 'quantile', 'auto', 'none', null]
+    clip_value: 14
+    center: null # can be one of ['constant', 'min', 'mean', 'none', null]
+    center_value: null
+    scale: "bit" # can be one of ['constant', 'bit', 'max', 'std', 'none', null]
+    scale_value: 14
 ```
 
 To start the prediction:
 
-```console
+```shell
 foo@bar:~$ bcfind-vfv-pred /path/to/vfv_config.yaml
 ```
