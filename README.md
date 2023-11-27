@@ -212,6 +212,6 @@ PreProcessing:
 
 To start the prediction:
 
-```shell
+```shell_session
 foo@bar:~$ bcfind-vfv-pred /path/to/vfv_config.yaml
 ```
