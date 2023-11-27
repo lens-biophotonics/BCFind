@@ -26,7 +26,6 @@ class Trainer:
     def __init__(self):
         self.seed = 2408
         self.reduce_loss = True
-        pass
 
     def make_unet_data(
         self,
@@ -552,7 +551,7 @@ def parse_args():
         help="Skip UNet training and train only the DoG",
     )
     parser.add_argument(
-        "--test-as-val",
+        "--val-from-test",
         default=False,
         action="store_true",
         help="part of the test-set as validation. UNet weights will be saved only when validation loss improves",
