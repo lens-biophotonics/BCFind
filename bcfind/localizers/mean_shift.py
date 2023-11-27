@@ -4,10 +4,9 @@ import pandas as pd
 import functools as ft
 import scipy.ndimage as sp_img
 import scipy.spatial as sp_spt
+import skimage.filters as skim_filt
 import sklearn.neighbors as sk_ngbr
 from bcfind.utils.localizers import get_counts_from_bm_eval
-
-from pythreshold.global_th.entropy import kapur_multithreshold
 
 from .bipartite_match import bipartite_match
 from bcfind.utils.base import remove_border_points_from_df, evaluate_df
@@ -33,8 +32,8 @@ class SpatialMeanShift:
         )
 
         if threshold == "auto":
-            print("Adopting Kapur thresholding")
-            t1, t2 = kapur_multithreshold(x, 2)
+            print("Adopting Otsu thresholding")
+            t1, t2 = skim_filt.threshold_multiotsu(x, 3)
             print(f"Removing {np.sum((maxima) & (x<t1))} seeds below {t1}")
             maxima[x < t1] = False
 
