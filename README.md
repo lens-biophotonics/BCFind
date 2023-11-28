@@ -7,13 +7,13 @@ BCfind (acronym for Brain Cell Finder) is a tool for brain cell localization fro
 First build the wheel:
 
 ```console
-user@local:/path/to/BCFind2.1$ python setup.py bdist_wheel
+python setup.py bdist_wheel
 ```
 
 Then install the wheel with pip:
 
 ```console
-user@local:/path/to/BCFind2.1$ pip install dist/bcfind-2.1.0-py3-none-any.whl
+pip install dist/bcfind-2.1.0-py3-none-any.whl
 ```
 
 ## Build docker image
@@ -21,10 +21,16 @@ user@local:/path/to/BCFind2.1$ pip install dist/bcfind-2.1.0-py3-none-any.whl
 Once the wheel has been built (no need for complete installation):
 
 ```console
-user@local:/path/to/BCFind2.1$ docker build -t bcfind:your_tag .
+docker build -t bcfind:your_tag .
 ```
 
-## Push the Docker image to the ATLANTE LENS registry
+Run the docker container in interactive mode:
+
+```console
+docker run -it --rm --gpus all -v /volume/to/mount/:/home/ bcfind:your_tag
+```
+
+## (LENS researchers only) Push the Docker image to the ATLANTE LENS registry
 
 Retag the image to the registry on `atlante.lens.unifi.it`:
 
@@ -128,7 +134,7 @@ DataAugmentation:
 -   `GT_files/Train`
 -   `GT_files/Test`
 -   `Tiff_files/Train`
--   `Tiff_files/Test`test-as
+-   `Tiff_files/Test`
 
 While `Experiment.basepath` does not need any particular structure, it is the path to the main folder where all the outputs of the experiment will be saved: the U-Net and DoG checkpoints, the tensorboard folders and the final predictions on the train and test sets.
 It will contain the following folders:
@@ -141,16 +147,10 @@ It will contain the following folders:
 
 ### Train BCFind
 
-If you use the docker image, open a container and run it in interactive mode:
-
-```console
-foo@bar:~$ docker run -it --rm --gpus all -v /volume/to/mount/:/home/ bcfind:your_tag
-```
-
 Once inside the docker container or directly on the machine where the bcfind package has been installed, you can start the training with:
 
 ```console
-foo@bar:~$ bcfind-train /path/to/train_config.yaml
+bcfind-train /path/to/train_config.yaml
 ```
 
 The above command takes one mandatory argument that is the configuration file and other four optional arguments:
@@ -158,14 +158,15 @@ The above command takes one mandatory argument that is the configuration file an
 -   `--gpu`: (int) select the gpu to use. Default to -1;
 -   `--lmdb`: (store true) if your dataset do not fit into memory an lmdb database is created before training to save memory usage. Default to False;
 -   `--only-dog`: (store true) train only the Difference of Gaussian from latest UNet checkpoint. Skip the UNet training. Default to False;
+-   `--only-test`: (store true) skip the whole training and evaluate only on test-set. Default to False;
 -   `--val-from-test`: (store true) split the test-set to obtain a validation-set (1/3). UNet weights will be saved only if the validation loss improves. The DoG will be trained on the validation-set. Default to False.
 
 ### Evaluate BCFind on test-set
 
-(Deprecated) The above command (bcfind-train) should also return test-set results.
+(Deprecated) The above command (bcfind-train) also returns test-set results.
 
 ```console
-foo@bar:~$ bcfind-test /path/to/train_config.yaml
+bcfind-test /path/to/train_config.yaml
 ```
 
 ## Tensorboard
@@ -186,7 +187,9 @@ Then open a window on your browser at the address `localhost:1111`, it will show
 
 ## VirtualFusedVolume predictions
 
-Another file .yaml sets the configurations for the prediction:
+If the volume is too large to fit into memory, only volumes stitched with zetastitcher can be handled.
+
+The following .yaml file sets the configurations for prediction:
 
 ```yaml
 Experiment:
@@ -215,5 +218,5 @@ PreProcessing:
 To start the prediction:
 
 ```console
- foo@bar:~$ bcfind-vfv-pred /path/to/vfv_config.yaml
+bcfind-vfv-pred /path/to/vfv_config.yaml
 ```
