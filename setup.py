@@ -5,7 +5,7 @@ with open("requirements.in") as f:
 
 setup(
     name="bcfind",
-    version="2.1.0",
+    version="2.0.0",
     description="BCFind is a tool for brain cells localization"
     "from large volumetric images",
     author="Curzio Checcucci, Toresano La Ode, Paolo Frasconi",
@@ -28,7 +28,7 @@ setup(
         "console_scripts": [
             "bcfind-train = bcfind.train:main",
             "bcfind-test = bcfind.test:main",
-            "bcfind-vfv-pred = bcfind.vfv_pred:main"
+            "bcfind-vfv-pred = bcfind.vfv_pred:main",
         ],
     },
 )
