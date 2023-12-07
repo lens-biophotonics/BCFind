@@ -9,7 +9,6 @@ import hyperopt as ho
 import functools as ft
 import concurrent.futures as cf
 
-from scipy import spatial
 from cupyx.scipy import ndimage as cpx_img
 from skimage.feature.blob import _prune_blobs
 
@@ -22,10 +21,10 @@ from bcfind.utils.base import (
 )
 
 
-# # Disable memory pool for device memory (GPU)
-# cp.cuda.set_allocator(None)
-# # Disable memory pool for pinned memory (CPU).
-# cp.cuda.set_pinned_memory_allocator(None)
+# Disable memory pool for device memory (GPU)
+cp.cuda.set_allocator(None)
+# Disable memory pool for pinned memory (CPU).
+cp.cuda.set_pinned_memory_allocator(None)
 
 
 def cp_peak_local_max(image, threshold_rel=0.0, footprint=None):
