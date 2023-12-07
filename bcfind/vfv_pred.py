@@ -147,7 +147,7 @@ def predict_vfv(
     preprocessing_fun=None,
     vfv_mask=None,
     sub_queue_size=5,
-    emb_queue_size=5,
+    emb_queue_size=10,
     localizer_threads=5,
 ):
     substack_q = Queue(maxsize=sub_queue_size)
@@ -241,6 +241,12 @@ def parse_args():
     )
     parser.add_argument("config", type=str, help="YAML Configuration file")
     parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=5,
+        help="Number of parallel threads to use for blob detection. Default to 5",
+    )
+    parser.add_argument(
         "--gpu", type=int, default=-1, help="Index of GPU to use. Default to -1"
     )
     return parser.parse_args()
@@ -314,6 +320,7 @@ def main():
         conf.vfv.pred_outdir,
         preprocessing_fun=get_preprocess_func(**conf.preproc),
         vfv_mask=vfv_mask,
+        localizer_threads=args.n_jobs,
     )
 
     # Merge and save all substack predictions
