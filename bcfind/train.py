@@ -92,7 +92,6 @@ class Trainer:
                 k_stride=k_stride,
                 dropout=dropout,
                 regularizer=regularizer,
-                mult_skip=mult_skip,
             )
         elif model_type == "se-unet":
             self.unet = SEUNet(
@@ -144,7 +143,6 @@ class Trainer:
                 k_stride=k_stride,
                 dropout=dropout,
                 regularizer=regularizer,
-                mult_skip=mult_skip,
             )
         else:
             raise ValueError(
@@ -378,7 +376,6 @@ class Trainer:
                 k_stride=conf.unet.k_stride,
                 dropout=conf.unet.dropout,
                 regularizer=conf.unet.regularizer,
-                mult_skip=conf.unet.mult_skip,
                 model_type=conf.unet.model,
                 squeeze_factor=conf.unet.squeeze_factor,
                 moe_n_experts=conf.unet.moe_n_experts,
