@@ -30,7 +30,7 @@ RUN set -ex \
 
 WORKDIR /home/
 
-ENV LD_LIBRARY_PATH="/usr/local/cuda-11.2/compat:${LD_LIBRARY_PATH}"
+# ENV LD_LIBRARY_PATH="/usr/local/cuda-11.2/compat:${LD_LIBRARY_PATH}"
 ENV PATH="/usr/local/cuda-11.2/bin:${PATH}"
 ENV CUPY_ACCELERATORS='cutensor'
 ENV CUPY_CUDA_PER_THREAD_DEFAULT_STREAM=1
