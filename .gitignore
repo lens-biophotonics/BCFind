@@ -5,3 +5,7 @@ dist/
 *.egg-info
 cufile.log
 *.cubin
+requirements.txt
+exp_configs/
+test/
+.vscode/
