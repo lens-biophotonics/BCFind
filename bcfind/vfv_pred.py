@@ -22,6 +22,34 @@ def substack_name(z0, y0, x0, patch_shape, overlap):
     return f"sub_{z0}_{y0}_{x0}____{patch_shape[0]}_{patch_shape[1]}_{patch_shape[2]}____{overlap[0]}_{overlap[1]}_{overlap[2]}"
 
 
+def is_out_of_mask(box_coord, vfv_mask, vfv_shape):
+    (z0, z1), (y0, y1), (x0, x1) = box_coord
+    mask_shape = np.array(vfv_mask.shape)
+    mask_rescale_factors = vfv_shape // mask_shape
+    if (mask_rescale_factors != 1).all():
+        print(
+            f"Found different shapes between VFV ({vfv_shape}) and mask ({mask_shape}). Rescaling locations for mask indexing"
+        )
+
+    m_z0, m_y0, m_x0 = np.array([z0, y0, x0] / mask_rescale_factors).astype(int)
+    m_z1, m_y1, m_x1 = np.array([z1, y1, x1] / mask_rescale_factors).astype(int)
+
+    mask_out = False
+    if mask_shape[0] == 1:
+        if (vfv_mask[0, m_y0:m_y1, m_x0:m_x1] == 0).all():
+            mask_out = True
+    elif mask_shape[1] == 1:
+        if (vfv_mask[m_z0:m_z1, 0, m_x0:m_x1] == 0).all():
+            mask_out = True
+    elif mask_shape[2] == 1:
+        if (vfv_mask[m_z0:m_z1, m_y0:m_y1, 0] == 0).all():
+            mask_out = True
+    else:
+        if (vfv_mask[m_z0:m_z1, m_y0:m_y1, m_x0:m_x1] == 0).all():
+            mask_out = True
+    return mask_out
+
+
 def put_substack_in_q(
     idx,
     patch_shape,
@@ -56,29 +84,8 @@ def put_substack_in_q(
     # mask handling
     if vfv_mask is not None:
         print("Handling mask...")
-        mask_shape = np.array(vfv_mask.shape)
-        mask_rescale_factors = vfv_shape // mask_shape
-        if (mask_rescale_factors != 1).all():
-            print(
-                f"Found different shapes between VFV ({vfv_shape}) and mask ({mask_shape}). Rescaling locations for mask indexing"
-            )
-
-        m_z0, m_y0, m_x0 = np.array([z0, y0, x0] / mask_rescale_factors).astype(int)
-        m_z1, m_y1, m_x1 = np.array([z1, y1, x1] / mask_rescale_factors).astype(int)
-
-        mask_out = False
-        if mask_shape[0] == 1:
-            if (vfv_mask[0, m_y0:m_y1, m_x0:m_x1] == 0).all():
-                mask_out = True
-        elif mask_shape[1] == 1:
-            if (vfv_mask[m_z0:m_z1, 0, m_x0:m_x1] == 0).all():
-                mask_out = True
-        elif mask_shape[2] == 1:
-            if (vfv_mask[m_z0:m_z1, m_y0:m_y1, 0] == 0).all():
-                mask_out = True
-        else:
-            if (vfv_mask[m_z0:m_z1, m_y0:m_y1, m_x0:m_x1] == 0).all():
-                mask_out = True
+        box_coord = ((z0, z1), (y0, y1), (x0, x1))
+        mask_out = is_out_of_mask(box_coord, vfv_mask, vfv_shape)
 
         if mask_out:
             print(f"Out of mask! Skipping")
@@ -266,7 +273,7 @@ def main():
         shutil.copy(args.config, conf.vfv.outdir)
     except shutil.SameFileError:
         fname = args.config.split("/")[-1]
-        os.path.remove(f"{conf.vfv.outdir}/{fname}")
+        os.remove(f"{conf.vfv.outdir}/{fname}")
         shutil.copy(args.config, conf.vfv.outdir)
 
     # Preparing U-Net
