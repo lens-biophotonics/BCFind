@@ -269,12 +269,14 @@ def main():
     conf = VFVConfiguration(args.config)
     # create directory to save predictions and copy the config file in there
     os.makedirs(conf.vfv.pred_outdir, exist_ok=True)
-    try:
-        shutil.copy(args.config, conf.vfv.outdir)
-    except shutil.SameFileError:
-        fname = args.config.split("/")[-1]
-        os.remove(f"{conf.vfv.outdir}/{fname}")
-        shutil.copy(args.config, conf.vfv.outdir)
+    config_name = os.path.basename(args.config)
+    dst = os.path.join(conf.vfv.outdir, config_name)
+    if os.path.exists(f"{conf.vfv.outdir}/{config_name}"):
+        if os.path.samefile(args.config, dst):
+            pass
+        else:
+            os.remove(dst)
+            shutil.copy(args.config, conf.vfv.outdir)
 
     # Preparing U-Net
     print("Loading UNet and DoG parameters...")

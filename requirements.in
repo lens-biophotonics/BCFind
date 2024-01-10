@@ -12,4 +12,4 @@ scikit-image
 scikit-learn
 scipy
 tensorflow>=2.9,<=2.11
-zetastitcher
+# zetastitcher

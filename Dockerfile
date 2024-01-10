@@ -17,6 +17,7 @@ RUN set -ex \
     python3-dev \
     python3-wheel \
     python3-setuptools \
+    git \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 COPY requirements.in /
@@ -26,6 +27,8 @@ RUN set -ex \
     && pip3 install --no-cache-dir pip-tools \
     && pip-compile requirements.in \
     && pip3 install --no-cache-dir -r requirements.txt \
+    && pip3 install --no-cache-dir zarr \
+    && pip3 install --no-cache-dir git+https://github.com/lens-biophotonics/ZetaStitcher.git@devel \
     && rm -r requirements.*
 
 WORKDIR /home/
@@ -34,7 +37,7 @@ WORKDIR /home/
 ENV PATH="/usr/local/cuda-11.2/bin:${PATH}"
 ENV CUPY_ACCELERATORS='cutensor'
 ENV CUPY_CUDA_PER_THREAD_DEFAULT_STREAM=1
-ENV CUPY_CACHE_DIR='/home/.cupy/kernel_cache'
+ENV CUPY_CACHE_DIR='/.cupy/kernel_cache'
 
 COPY dist/*.whl /home/
 RUN set -ex \
