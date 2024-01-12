@@ -151,6 +151,7 @@ def predict_vfv(
     patch_shape,
     overlap,
     outdir,
+    from_to=None,
     preprocessing_fun=None,
     vfv_mask=None,
     sub_queue_size=5,
@@ -210,21 +211,36 @@ def predict_vfv(
     no_overlap_shape = np.ceil(patch_shape - overlap).astype(int)
     nz, ny, nx = np.ceil(vfv_shape / no_overlap_shape).astype(int)
 
+    i = -1
     with cf.ThreadPoolExecutor(15) as pool:
         for z in range(nz):
             for y in range(ny):
                 for x in range(nx):
-                    _ = pool.submit(
-                        put_substack_in_q,
-                        [z, y, x],
-                        patch_shape,
-                        vfv,
-                        overlap,
-                        substack_q,
-                        preprocessing_fun,
-                        vfv_mask,
-                        not_to_do,
-                    )
+                    i += 1
+                    if from_to is None:
+                        _ = pool.submit(
+                            put_substack_in_q,
+                            [z, y, x],
+                            patch_shape,
+                            vfv,
+                            overlap,
+                            substack_q,
+                            preprocessing_fun,
+                            vfv_mask,
+                            not_to_do,
+                        )
+                    elif i >= from_to[0] and i < from_to[1]:
+                        _ = pool.submit(
+                            put_substack_in_q,
+                            [z, y, x],
+                            patch_shape,
+                            vfv,
+                            overlap,
+                            substack_q,
+                            preprocessing_fun,
+                            vfv_mask,
+                            not_to_do,
+                        )
 
     # Close threads
     print("Closing threads")
@@ -236,6 +252,62 @@ def predict_vfv(
     nn_thread.join()
     for t in loc_threads:
         t.join()
+
+
+def get_number_of_patches(vfv_shape, patch_shape, overlap):
+    no_overlap_shape = np.ceil(patch_shape - overlap).astype(int)
+    nz, ny, nx = np.ceil(vfv_shape / no_overlap_shape).astype(int)
+    return nz * ny * nx
+
+
+def mask_cloud_df(cloud_df, mask, vfv_shape):
+    mask_shape = np.array(mask.shape)
+    mask_rescale_factors = vfv_shape / mask_shape
+    # mask_resolution = conf.vfv.dim_resolution * mask_rescale_factors
+
+    cloud_df_rescaled = cloud_df[["z", "y", "x"]] / (mask_rescale_factors)
+    z_coords, y_coords, x_coords = (
+        cloud_df_rescaled["z"],
+        cloud_df_rescaled["y"],
+        cloud_df_rescaled["x"],
+    )
+
+    if mask_shape[0] == 1:
+        in_mask = [
+            mask[0, int(np.floor(y) - 1), int(np.floor(x) - 1)]
+            for y, x in zip(y_coords, x_coords)
+        ]
+    elif mask_shape[1] == 1:
+        in_mask = [
+            mask[int(np.floor(z)), 0, int(np.floor(x))]
+            for z, x in zip(z_coords, x_coords)
+        ]
+    elif mask_shape[2] == 1:
+        in_mask = [
+            mask[int(np.floor(z)), int(np.floor(y)), 0]
+            for z, y in zip(z_coords, y_coords)
+        ]
+    else:
+        in_mask = [
+            mask[int(np.floor(z)), int(np.floor(y)), int(np.floor(x))]
+            for z, y, x in zip(z_coords, y_coords, x_coords)
+        ]
+
+    cloud_df = cloud_df[np.array(in_mask, dtype=bool)]
+    return cloud_df
+
+
+def save_point_cloud(pred_outdir, outfile, dim_resolution=(1, 1, 1), mask=None):
+    print("\nVFV predictions finished, making cloud...")
+    cloud_df = make_cloud(pred_outdir, dim_resolution)
+
+    # If mask is given, remove predicted points outside of it
+    if mask is not None:
+        coords_only = cloud_df[["z", "y", "x"]]
+        coords_only = mask_cloud_df(coords_only / dim_resolution, mask)
+        cloud_df[["z", "y", "x"]] = coords_only * dim_resolution
+
+    cloud_df.to_csv(outfile, index=False)
 
 
 def parse_args():
@@ -255,6 +327,13 @@ def parse_args():
     )
     parser.add_argument(
         "--gpu", type=int, default=-1, help="Index of GPU to use. Default to -1"
+    )
+    parser.add_argument(
+        "--from-to",
+        type=int,
+        default=None,
+        nargs="+",
+        help="Two integers indicating the starting and ending substack index. Interval is (]. Default to None: all substacks will be analyzed.)",
     )
     return parser.parse_args()
 
@@ -279,7 +358,7 @@ def main():
             shutil.copy(args.config, conf.vfv.outdir)
 
     # Preparing U-Net
-    print("Loading UNet and DoG parameters...")
+    print("\nLoading UNet and DoG parameters...")
     unet = tf.keras.models.load_model(
         f"{conf.unet.checkpoint_dir}/model.tf", compile=False
     )
@@ -299,7 +378,7 @@ def main():
         print("No optimal DoG parameteres found, assigning defaults.")
 
     # Loading Virtual Fused Volume and optional mask
-    print("Loading VirtualFusedVolume...")
+    print("\nLoading VirtualFusedVolume...")
     if conf.vfv.config_file.endswith(".yml"):
         vfv = VirtualFusedVolume(conf.vfv.config_file)
     elif conf.vfv.config_file.endswith(".tif") or conf.vfv.config_file.endswith(
@@ -310,16 +389,19 @@ def main():
         raise ValueError(
             f'VFV not found. {conf.vfv.config_file}: file format not supported, not in [".yml", ".tif", ".tiff"]'
         )
+
+    n = get_number_of_patches(vfv.shape, conf.vfv.patch_shape, conf.vfv.overlap)
     print(f"VirtualFusedVolume with shape = {vfv.shape}")
+    print(f"{n} patches to complete the whole prediction.")
 
     if conf.vfv.mask_path is not None:
         vfv_mask = skio.imread(conf.vfv.mask_path)
-        print(f"Mask found! Shape = {vfv_mask.shape}, values = {np.unique(vfv_mask)}")
+        print(f"\nMask found! Shape = {vfv_mask.shape}, values = {np.unique(vfv_mask)}")
     else:
         vfv_mask = None
 
     # Start predictions
-    print("Starting predictions...")
+    print("\nStarting predictions...")
     predict_vfv(
         unet,
         dog,
@@ -327,54 +409,27 @@ def main():
         conf.vfv.patch_shape,
         conf.vfv.patch_overlap,
         conf.vfv.pred_outdir,
+        from_to=args.from_to,
         preprocessing_fun=get_preprocess_func(**conf.preproc),
         vfv_mask=vfv_mask,
         localizer_threads=args.n_jobs,
     )
 
     # Merge and save all substack predictions
-    print("VFV predictions finished, making cloud...")
-    cloud_df = make_cloud(conf.vfv.pred_outdir, conf.vfv.dim_resolution)
-
-    # If mask is given, remove predicted points outside of it
-    if vfv_mask is not None:
-        mask_shape = np.array(vfv_mask.shape)
-        mask_rescale_factors = vfv.shape / mask_shape
-        # mask_resolution = conf.vfv.dim_resolution * mask_rescale_factors
-
-        cloud_df_rescaled = cloud_df[["z", "y", "x"]] / (
-            conf.vfv.dim_resolution * mask_rescale_factors
+    if args.from_to is None:
+        save_point_cloud(
+            conf.vfv.pred_outdir,
+            f"{conf.vfv.outdir}/{conf.vfv.name}_cloud.csv",
+            conf.vfv.dim_resolution,
+            vfv_mask,
         )
-        z_coords, y_coords, x_coords = (
-            cloud_df_rescaled["z"],
-            cloud_df_rescaled["y"],
-            cloud_df_rescaled["x"],
+    elif args.from_to[1] >= n:
+        save_point_cloud(
+            conf.vfv.pred_outdir,
+            f"{conf.vfv.outdir}/{conf.vfv.name}_cloud.csv",
+            conf.vfv.dim_resolution,
+            vfv_mask,
         )
-
-        if mask_shape[0] == 1:
-            in_mask = [
-                vfv_mask[0, int(np.floor(y) - 1), int(np.floor(x) - 1)]
-                for y, x in zip(y_coords, x_coords)
-            ]
-        elif mask_shape[1] == 1:
-            in_mask = [
-                vfv_mask[int(np.floor(z)), 0, int(np.floor(x))]
-                for z, x in zip(z_coords, x_coords)
-            ]
-        elif mask_shape[2] == 1:
-            in_mask = [
-                vfv_mask[int(np.floor(z)), int(np.floor(y)), 0]
-                for z, y in zip(z_coords, y_coords)
-            ]
-        else:
-            in_mask = [
-                vfv_mask[int(np.floor(z)), int(np.floor(y)), int(np.floor(x))]
-                for z, y, x in zip(z_coords, y_coords, x_coords)
-            ]
-
-        cloud_df = cloud_df[np.array(in_mask, dtype=bool)]
-
-    cloud_df.to_csv(f"{conf.vfv.outdir}/{conf.vfv.name}_cloud.csv", index=False)
 
 
 if __name__ == "__main__":
