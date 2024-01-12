@@ -390,7 +390,11 @@ def main():
             f'VFV not found. {conf.vfv.config_file}: file format not supported, not in [".yml", ".tif", ".tiff"]'
         )
 
-    n = get_number_of_patches(vfv.shape, conf.vfv.patch_shape, conf.vfv.overlap)
+    n = get_number_of_patches(
+        vfv.shape,
+        conf.vfv.patch_shape,
+        conf.vfv.patch_overlap,
+    )
     print(f"VirtualFusedVolume with shape = {vfv.shape}")
     print(f"{n} patches to complete the whole prediction.")
 
