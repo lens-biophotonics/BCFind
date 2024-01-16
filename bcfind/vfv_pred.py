@@ -332,13 +332,13 @@ def parse_args():
         "--start",
         type=float,
         default=0.0,
-        help=f"A float in [0, 1] indicating the starting substack index expressed as a percentage of the total number of substacks in the VirtualFusedVolume.)",
+        help=f"A float in [0, 1] indicating the starting substack index expressed as a percentage of the total number of substacks in the VirtualFusedVolume. Default to 0.",
     )
     parser.add_argument(
         "--end",
         type=float,
         default=1.0,
-        help=f"A float in [0, 1] indicating the ending substack index expressed as a percentage of the total number of substacks in the VirtualFusedVolume.)",
+        help=f"A float in [0, 1] indicating the ending substack index expressed as a percentage of the total number of substacks in the VirtualFusedVolume. Default to 1.",
     )
     return parser.parse_args()
 
