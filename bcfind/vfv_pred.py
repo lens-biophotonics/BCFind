@@ -329,11 +329,16 @@ def parse_args():
         "--gpu", type=int, default=-1, help="Index of GPU to use. Default to -1"
     )
     parser.add_argument(
-        "--from-to",
-        type=int,
-        default=None,
-        nargs="+",
-        help="Two integers indicating the starting and ending substack index. Interval is (]. Default to None: all substacks will be analyzed.)",
+        "--start",
+        type=float,
+        default=0.0,
+        help=f"A float in [0, 1] indicating the starting substack index expressed as a percentage of the total number of substacks in the VirtualFusedVolume.)",
+    )
+    parser.add_argument(
+        "--end",
+        type=float,
+        default=1.0,
+        help=f"A float in [0, 1] indicating the ending substack index expressed as a percentage of the total number of substacks in the VirtualFusedVolume.)",
     )
     return parser.parse_args()
 
@@ -406,6 +411,7 @@ def main():
 
     # Start predictions
     print("\nStarting predictions...")
+    s, e = int(args.start * n), int(args.end * n)
     predict_vfv(
         unet,
         dog,
@@ -413,7 +419,7 @@ def main():
         conf.vfv.patch_shape,
         conf.vfv.patch_overlap,
         conf.vfv.pred_outdir,
-        from_to=args.from_to,
+        from_to=[s, e],
         preprocessing_fun=get_preprocess_func(**conf.preproc),
         vfv_mask=vfv_mask,
         localizer_threads=args.n_jobs,
