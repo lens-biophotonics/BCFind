@@ -426,14 +426,7 @@ def main():
     )
 
     # Merge and save all substack predictions
-    if args.from_to is None:
-        save_point_cloud(
-            conf.vfv.pred_outdir,
-            f"{conf.vfv.outdir}/{conf.vfv.name}_cloud.csv",
-            conf.vfv.dim_resolution,
-            vfv_mask,
-        )
-    elif args.from_to[1] >= n:
+    if args.end == 1.0:
         save_point_cloud(
             conf.vfv.pred_outdir,
             f"{conf.vfv.outdir}/{conf.vfv.name}_cloud.csv",
