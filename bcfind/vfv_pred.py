@@ -385,6 +385,10 @@ def main():
     # Loading Virtual Fused Volume and optional mask
     print("\nLoading VirtualFusedVolume...")
     if conf.vfv.config_file.endswith(".yml"):
+        import zetastitcher.io.zipwrapper as zw
+        from cachetools import LRUCache
+
+        zw.set_cache(LRUCache(maxsize=32))
         vfv = VirtualFusedVolume(conf.vfv.config_file)
     elif conf.vfv.config_file.endswith(".tif") or conf.vfv.config_file.endswith(
         ".tiff"
