@@ -340,6 +340,12 @@ def parse_args():
         default=1.0,
         help=f"A float in [0, 1] indicating the ending substack index expressed as a percentage of the total number of substacks in the VirtualFusedVolume. Default to 1.",
     )
+    parser.add_argument(
+        "--vfv-cache",
+        type=int,
+        default=32,
+        help=f"Number of VFV calls to cache. Default to 32.",
+    )
     return parser.parse_args()
 
 
@@ -388,7 +394,7 @@ def main():
         import zetastitcher.io.zipwrapper as zw
         from cachetools import LRUCache
 
-        zw.set_cache(LRUCache(maxsize=32))
+        zw.set_cache(LRUCache(maxsize=args.vfv_cache))
         vfv = VirtualFusedVolume(conf.vfv.config_file)
     elif conf.vfv.config_file.endswith(".tif") or conf.vfv.config_file.endswith(
         ".tiff"
