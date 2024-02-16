@@ -9,9 +9,11 @@ import pandas as pd
 import tensorflow as tf
 import skimage.io as skio
 import concurrent.futures as cf
+import zetastitcher.io.zipwrapper as zw
 
 from queue import Queue
 from zetastitcher import VirtualFusedVolume
+from cachetools import LRUCache
 
 from bcfind.utils.data import get_preprocess_func
 from bcfind.localizers import BlobDoG
@@ -56,6 +58,7 @@ def put_substack_in_q(
     vfv,
     overlap,
     queue,
+    min_thresh=0,
     preprocessing_fun=None,
     vfv_mask=None,
     not_to_do=None,
@@ -93,6 +96,10 @@ def put_substack_in_q(
 
     substack = np.zeros(patch_shape)
     substack[: z1 - z0, : y1 - y0, : x1 - x0] = vfv[z0:z1, y0:y1, x0:x1]
+
+    if substack.mean() < min_thresh:
+        print(f"Substack mean = {substack.mean()} < {min_thresh}. Skipping ")
+        return
 
     if preprocessing_fun is not None:
         print("Preprocessing...")
@@ -151,6 +158,7 @@ def predict_vfv(
     patch_shape,
     overlap,
     outdir,
+    min_thresh=0,
     from_to=None,
     preprocessing_fun=None,
     vfv_mask=None,
@@ -173,7 +181,10 @@ def predict_vfv(
             substack, name = got
 
             print(f"UNet prediction on substack {name}")
-            nn_pred = nn_model(substack[tf.newaxis, ..., tf.newaxis], training=False)
+            nn_pred = nn_model(
+                substack[tf.newaxis, ..., tf.newaxis],
+                training=False,
+            )
             nn_pred = tf.sigmoid(tf.squeeze(nn_pred)).numpy() * 255
 
             embedding_q.put([nn_pred, name])
@@ -225,6 +236,7 @@ def predict_vfv(
                             vfv,
                             overlap,
                             substack_q,
+                            min_thresh,
                             preprocessing_fun,
                             vfv_mask,
                             not_to_do,
@@ -332,19 +344,30 @@ def parse_args():
         "--start",
         type=float,
         default=0.0,
-        help=f"A float in [0, 1] indicating the starting substack index expressed as a percentage of the total number of substacks in the VirtualFusedVolume. Default to 0.",
+        help=f"A float in [0, 1] indicating the starting substack index 
+        expressed as a percentage of the total number of substacks in the 
+        VirtualFusedVolume. Default to 0.",
     )
     parser.add_argument(
         "--end",
         type=float,
         default=1.0,
-        help=f"A float in [0, 1] indicating the ending substack index expressed as a percentage of the total number of substacks in the VirtualFusedVolume. Default to 1.",
+        help=f"A float in [0, 1] indicating the ending substack index expressed 
+        as a percentage of the total number of substacks in the 
+        VirtualFusedVolume. Default to 1.",
     )
     parser.add_argument(
         "--vfv-cache",
         type=int,
         default=32,
         help=f"Number of VFV calls to cache. Default to 32.",
+    )
+    parser.add_argument(
+        "--min-thresh",
+        type=int,
+        default=0,
+        help=f"Substacks whose mean is below this threshold will be discarded. 
+        Default to 0.",
     )
     return parser.parse_args()
 
@@ -391,18 +414,15 @@ def main():
     # Loading Virtual Fused Volume and optional mask
     print("\nLoading VirtualFusedVolume...")
     if conf.vfv.config_file.endswith(".yml"):
-        import zetastitcher.io.zipwrapper as zw
-        from cachetools import LRUCache
-
         zw.set_cache(LRUCache(maxsize=args.vfv_cache))
         vfv = VirtualFusedVolume(conf.vfv.config_file)
-    elif conf.vfv.config_file.endswith(".tif") or conf.vfv.config_file.endswith(
-        ".tiff"
-    ):
+    elif conf.vfv.config_file.endswith(".tif") or \
+        conf.vfv.config_file.endswith(".tiff"):
         vfv = skio.imread(conf.vfv.config_file)
     else:
         raise ValueError(
-            f'VFV not found. {conf.vfv.config_file}: file format not supported, not in [".yml", ".tif", ".tiff"]'
+            f'VFV not found. {conf.vfv.config_file}: file format not supported, 
+            not in [".yml", ".tif", ".tiff"]'
         )
 
     n = get_number_of_patches(
@@ -415,7 +435,8 @@ def main():
 
     if conf.vfv.mask_path is not None:
         vfv_mask = skio.imread(conf.vfv.mask_path)
-        print(f"\nMask found! Shape = {vfv_mask.shape}, values = {np.unique(vfv_mask)}")
+        print(f"\nMask found! Shape = {vfv_mask.shape}, values = 
+              {np.unique(vfv_mask)}")
     else:
         vfv_mask = None
 
@@ -429,6 +450,7 @@ def main():
         conf.vfv.patch_shape,
         conf.vfv.patch_overlap,
         conf.vfv.pred_outdir,
+        min_thresh=args.min_thresh,
         from_to=[s, e],
         preprocessing_fun=get_preprocess_func(**conf.preproc),
         vfv_mask=vfv_mask,
