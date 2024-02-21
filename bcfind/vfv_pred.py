@@ -30,7 +30,8 @@ def is_out_of_mask(box_coord, vfv_mask, vfv_shape):
     mask_rescale_factors = vfv_shape // mask_shape
     if (mask_rescale_factors != 1).all():
         print(
-            f"Found different shapes between VFV ({vfv_shape}) and mask ({mask_shape}). Rescaling locations for mask indexing"
+            f"""Found different shapes between VFV ({vfv_shape}) and mask ({mask_shape}). 
+            Rescaling locations for mask indexing"""
         )
 
     m_z0, m_y0, m_x0 = np.array([z0, y0, x0] / mask_rescale_factors).astype(int)
@@ -61,7 +62,7 @@ def put_substack_in_q(
     min_thresh=0,
     preprocessing_fun=None,
     vfv_mask=None,
-    not_to_do=None,
+    not_to_do=[],
 ):
     vfv_shape = np.array(vfv.shape)
     no_overlap_shape = np.ceil(patch_shape - overlap).astype(int)
@@ -80,6 +81,7 @@ def put_substack_in_q(
     # Substack name to save and retrieve position in VFV
     sub_name = substack_name(z0, y0, x0, patch_shape, overlap)
     print(f"\nRetrieving substack {sub_name}")
+    print(not_to_do)
     if sub_name in not_to_do:
         print("Already done! Skipping")
         return
@@ -97,8 +99,8 @@ def put_substack_in_q(
     substack = np.zeros(patch_shape)
     substack[: z1 - z0, : y1 - y0, : x1 - x0] = vfv[z0:z1, y0:y1, x0:x1]
 
-    if substack.mean() < min_thresh:
-        print(f"Substack mean = {substack.mean()} < {min_thresh}. Skipping ")
+    if np.mean(substack) < min_thresh:
+        print(f"Substack mean = {np.mean(substack)} < {min_thresh}. Skipping ")
         return
 
     if preprocessing_fun is not None:
@@ -249,6 +251,7 @@ def predict_vfv(
                             vfv,
                             overlap,
                             substack_q,
+                            min_thresh,
                             preprocessing_fun,
                             vfv_mask,
                             not_to_do,
@@ -309,14 +312,17 @@ def mask_cloud_df(cloud_df, mask, vfv_shape):
     return cloud_df
 
 
-def save_point_cloud(pred_outdir, outfile, dim_resolution=(1, 1, 1), mask=None):
+def save_point_cloud(
+    pred_outdir, outfile, dim_resolution=(1, 1, 1), mask=None, vfv_shape=None
+):
     print("\nVFV predictions finished, making cloud...")
     cloud_df = make_cloud(pred_outdir, dim_resolution)
 
     # If mask is given, remove predicted points outside of it
     if mask is not None:
+        assert vfv_shape is not None, "If mask is given, also vfv_shape is needed."
         coords_only = cloud_df[["z", "y", "x"]]
-        coords_only = mask_cloud_df(coords_only / dim_resolution, mask)
+        coords_only = mask_cloud_df(coords_only / dim_resolution, mask, vfv_shape)
         cloud_df[["z", "y", "x"]] = coords_only * dim_resolution
 
     cloud_df.to_csv(outfile, index=False)
@@ -344,30 +350,30 @@ def parse_args():
         "--start",
         type=float,
         default=0.0,
-        help=f"A float in [0, 1] indicating the starting substack index 
-        expressed as a percentage of the total number of substacks in the 
-        VirtualFusedVolume. Default to 0.",
+        help="""A float in [0, 1] indicating the starting substack index expressed 
+             as a percentage of the total number of substacks in the VirtualFusedVolume. 
+             Default to 0.""",
     )
     parser.add_argument(
         "--end",
         type=float,
         default=1.0,
-        help=f"A float in [0, 1] indicating the ending substack index expressed 
+        help=""" A float in [0, 1] indicating the ending substack index expressed 
         as a percentage of the total number of substacks in the 
-        VirtualFusedVolume. Default to 1.",
+        VirtualFusedVolume. Default to 1.""",
     )
     parser.add_argument(
         "--vfv-cache",
         type=int,
         default=32,
-        help=f"Number of VFV calls to cache. Default to 32.",
+        help="Number of VFV calls to cache. Default to 32.",
     )
     parser.add_argument(
         "--min-thresh",
         type=int,
         default=0,
-        help=f"Substacks whose mean is below this threshold will be discarded. 
-        Default to 0.",
+        help="""Substacks whose mean is below this threshold will be discarded. 
+        Default to 0.""",
     )
     return parser.parse_args()
 
@@ -416,13 +422,13 @@ def main():
     if conf.vfv.config_file.endswith(".yml"):
         zw.set_cache(LRUCache(maxsize=args.vfv_cache))
         vfv = VirtualFusedVolume(conf.vfv.config_file)
-    elif conf.vfv.config_file.endswith(".tif") or \
-        conf.vfv.config_file.endswith(".tiff"):
+    elif conf.vfv.config_file.endswith(".tif") or conf.vfv.config_file.endswith(
+        ".tiff"
+    ):
         vfv = skio.imread(conf.vfv.config_file)
     else:
         raise ValueError(
-            f'VFV not found. {conf.vfv.config_file}: file format not supported, 
-            not in [".yml", ".tif", ".tiff"]'
+            f'VFV not found. {conf.vfv.config_file}: file format not supported, not in [".yml", ".tif", ".tiff"]'
         )
 
     n = get_number_of_patches(
@@ -435,8 +441,10 @@ def main():
 
     if conf.vfv.mask_path is not None:
         vfv_mask = skio.imread(conf.vfv.mask_path)
-        print(f"\nMask found! Shape = {vfv_mask.shape}, values = 
-              {np.unique(vfv_mask)}")
+        print(
+            f"""\nMask found! Shape = {vfv_mask.shape}, values = 
+              {np.unique(vfv_mask)}"""
+        )
     else:
         vfv_mask = None
 
@@ -464,6 +472,7 @@ def main():
             f"{conf.vfv.outdir}/{conf.vfv.name}_cloud.csv",
             conf.vfv.dim_resolution,
             vfv_mask,
+            vfv.shape,
         )
 
 
