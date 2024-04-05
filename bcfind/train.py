@@ -185,7 +185,7 @@ class Trainer:
         self.unet.compile(loss=loss, optimizer=optimizer, metrics=[prec, rec, f1])
 
     def fit_unet(
-        self, epochs, checkpoint_dir=None, tensorboard_dir=None, test_as_val=False
+        self, epochs, checkpoint_dir=None, tensorboard_dir=None, val_from_test=False
     ):
         callbacks = []
         if checkpoint_dir:
@@ -193,7 +193,7 @@ class Trainer:
                 os.makedirs(checkpoint_dir, exist_ok=True)
 
             monitor = "loss"
-            if test_as_val:
+            if val_from_test:
                 monitor = "val_loss"
 
             MC_callback = tf.keras.callbacks.ModelCheckpoint(
@@ -298,7 +298,7 @@ class Trainer:
         return self.dog
 
     def run(
-        self, config_file, only_dog=False, test_as_val=None, use_lmdb=False, gpu=-1
+        self, config_file, only_dog=False, val_from_test=None, use_lmdb=False, gpu=-1
     ):
         gpus = tf.config.list_physical_devices("GPU")
         tf.config.set_visible_devices(gpus[gpu], "GPU")
@@ -313,7 +313,7 @@ class Trainer:
             conf.data.test_tif_dir, conf.data.test_gt_dir
         )
 
-        if test_as_val:
+        if val_from_test:
             print("ATTN!! Using part of the test-set as validation")
             nt = len(test_tiff_files)
             np.random.seed(self.seed)
@@ -338,7 +338,7 @@ class Trainer:
             ############ UNET DATA #############
             ####################################
             print("\nLOADING UNET DATA")
-            if test_as_val:
+            if val_from_test:
                 self.make_unet_data(
                     train_inputs=train_tiff_files,
                     train_targets=train_marker_files,
@@ -411,7 +411,7 @@ class Trainer:
         ############ DOG DATA ##############
         ####################################
         print("\nLOADING DoG DATA")
-        if test_as_val:
+        if val_from_test:
             tiff_files = val_tiff_files
             marker_files = val_marker_files
             db_name = "Val_pred_lmdb"
@@ -443,7 +443,7 @@ class Trainer:
         )
         print(f"Best parameters found for DoG: {self.dog.get_parameters()}")
 
-    def test(self, config_file, test_as_val, gpu=-1):
+    def test(self, config_file, val_from_test, gpu=-1):
         gpus = tf.config.list_physical_devices("GPU")
         tf.config.set_visible_devices(gpus[gpu], "GPU")
         tf.config.experimental.set_memory_growth(gpus[gpu], True)
@@ -453,7 +453,7 @@ class Trainer:
         test_tiff_files, test_marker_files = get_inputs_target_paths(
             conf.data.test_tif_dir, conf.data.test_gt_dir
         )
-        if test_as_val:
+        if val_from_test:
             print("ATTN!! Using part of the test-set as validation")
             nt = len(test_tiff_files)
             np.random.seed(self.seed)
@@ -567,9 +567,9 @@ def main():
 
     trainer = Trainer()
     if not args.only_test:
-        trainer.run(args.config, args.only_dog, args.test_as_val, args.lmdb, args.gpu)
+        trainer.run(args.config, args.only_dog, args.val_from_test, args.lmdb, args.gpu)
 
-    trainer.test(args.config, args.test_as_val, args.gpu)
+    trainer.test(args.config, args.val_from_test, args.gpu)
 
 
 if __name__ == "__main__":
