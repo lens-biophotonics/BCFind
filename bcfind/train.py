@@ -317,7 +317,7 @@ class Trainer:
             print("ATTN!! Using part of the test-set as validation")
             nt = len(test_tiff_files)
             np.random.seed(self.seed)
-            val_idx = np.random.randint(0, nt, size=nt // 3)
+            val_idx = np.random.choice(0, nt, size=nt // 3, replace=False)
             val_tiff_files = [test_tiff_files[i] for i in val_idx]
             val_marker_files = [test_marker_files[i] for i in val_idx]
             for vtf, vmf in zip(val_tiff_files, val_marker_files):
@@ -457,7 +457,7 @@ class Trainer:
             print("ATTN!! Using part of the test-set as validation")
             nt = len(test_tiff_files)
             np.random.seed(self.seed)
-            val_idx = np.random.randint(0, nt, size=nt // 3)
+            val_idx = np.random.choice(0, nt, size=nt // 3, replace=False)
             val_tiff_files = [test_tiff_files[i] for i in val_idx]
             val_marker_files = [test_marker_files[i] for i in val_idx]
             for vtf, vmf in zip(val_tiff_files, val_marker_files):
