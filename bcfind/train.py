@@ -444,6 +444,8 @@ class Trainer:
         print(f"Best parameters found for DoG: {self.dog.get_parameters()}")
 
     def test(self, config_file, val_from_test, gpu=-1):
+        import tensorflow as tf
+
         gpus = tf.config.list_physical_devices("GPU")
         tf.config.set_visible_devices(gpus[gpu], "GPU")
         tf.config.experimental.set_memory_growth(gpus[gpu], True)
