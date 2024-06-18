@@ -259,7 +259,7 @@ class Trainer:
 
         # True cell coordinates
         dog_targets = []
-        for marker_file in marker_files:
+        for marker_file in sorted(marker_files):
             print(f"Loading file {marker_file}")
             y = get_gt_as_numpy(marker_file)
             dog_targets.append(y)
@@ -316,8 +316,10 @@ class Trainer:
         if val_from_test:
             print("ATTN!! Using part of the test-set as validation")
             nt = len(test_tiff_files)
+
             np.random.seed(self.seed)
-            val_idx = np.random.choice(0, nt, size=nt // 3, replace=False)
+            val_idx = np.random.choice(nt, size=nt // 3, replace=False)
+
             val_tiff_files = [test_tiff_files[i] for i in val_idx]
             val_marker_files = [test_marker_files[i] for i in val_idx]
             for vtf, vmf in zip(val_tiff_files, val_marker_files):
