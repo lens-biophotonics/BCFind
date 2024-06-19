@@ -103,11 +103,11 @@ DoG:
 
 PreProcessing:
     clip: "bit" # can be one of ['constant', 'bit', 'quantile', 'auto', null]
-    clip_value: 15
+    clip_value: 14
     center: null # can be one of ['constant', 'min', 'mean', null]
     center_value: null
     scale: "bit" # can be one of ['constant', 'bit', 'max', 'std', null]
-    scale_value: 15
+    scale_value: 14
 
 DataAugmentation:
     augment: false
@@ -171,7 +171,7 @@ The above command takes one mandatory argument that is the configuration file an
 -   `--lmdb`: (store true) if your dataset do not fit into memory an lmdb database is created before training to save memory usage. Default to False;
 -   `--only-dog`: (store true) train only the Difference of Gaussian from latest UNet checkpoint. Skip the UNet training. Default to False;
 -   `--only-test`: (store true) skip the whole training and evaluate only on test-set. Default to False.
-<!-- -   `--val-from-test`: (store true) split the test-set to obtain a validation-set (1/3). UNet weights will be saved only if the validation loss improves. The DoG will be trained on the validation-set. Default to False. -->
+-   `--val-from-train`: (store true) split the train-set to obtain a validation-set (1/4). UNet weights will be saved only if the validation loss improves. The DoG will be trained on the validation-set. Default to False.
 
 ### Evaluate BCFind on test-set
 

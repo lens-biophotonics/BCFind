@@ -298,7 +298,7 @@ class Trainer:
         return self.dog
 
     def run(
-        self, config_file, only_dog=False, val_from_test=None, use_lmdb=False, gpu=-1
+        self, config_file, only_dog=False, val_from_train=None, use_lmdb=False, gpu=-1
     ):
         gpus = tf.config.list_physical_devices("GPU")
         tf.config.set_visible_devices(gpus[gpu], "GPU")
@@ -309,22 +309,21 @@ class Trainer:
         train_tiff_files, train_marker_files = get_inputs_target_paths(
             conf.data.train_tif_dir, conf.data.train_gt_dir
         )
-        test_tiff_files, test_marker_files = get_inputs_target_paths(
-            conf.data.test_tif_dir, conf.data.test_gt_dir
-        )
+        # test_tiff_files, test_marker_files = get_inputs_target_paths(
+        #     conf.data.test_tif_dir, conf.data.test_gt_dir
+        # )
 
-        if val_from_test:
-            print("ATTN!! Using part of the test-set as validation")
-            nt = len(test_tiff_files)
+        if val_from_train:
+            nt = len(train_tiff_files)
 
             np.random.seed(self.seed)
-            val_idx = np.random.choice(nt, size=nt // 3, replace=False)
+            val_idx = np.random.choice(nt, size=nt // 4, replace=False)
 
-            val_tiff_files = [test_tiff_files[i] for i in val_idx]
-            val_marker_files = [test_marker_files[i] for i in val_idx]
+            val_tiff_files = [train_tiff_files[i] for i in val_idx]
+            val_marker_files = [train_marker_files[i] for i in val_idx]
             for vtf, vmf in zip(val_tiff_files, val_marker_files):
-                test_tiff_files.remove(vtf)
-                test_marker_files.remove(vmf)
+                train_tiff_files.remove(vtf)
+                train_marker_files.remove(vmf)
 
         if not only_dog:
             ######################################
@@ -340,7 +339,7 @@ class Trainer:
             ############ UNET DATA #############
             ####################################
             print("\nLOADING UNET DATA")
-            if val_from_test:
+            if val_from_train:
                 self.make_unet_data(
                     train_inputs=train_tiff_files,
                     train_targets=train_marker_files,
@@ -413,7 +412,7 @@ class Trainer:
         ############ DOG DATA ##############
         ####################################
         print("\nLOADING DoG DATA")
-        if val_from_test:
+        if val_from_train:
             tiff_files = val_tiff_files
             marker_files = val_marker_files
             db_name = "Val_pred_lmdb"
@@ -445,7 +444,7 @@ class Trainer:
         )
         print(f"Best parameters found for DoG: {self.dog.get_parameters()}")
 
-    def test(self, config_file, val_from_test, gpu=-1):
+    def test(self, config_file, gpu=-1):
         import tensorflow as tf
 
         gpus = tf.config.list_physical_devices("GPU")
@@ -457,16 +456,6 @@ class Trainer:
         test_tiff_files, test_marker_files = get_inputs_target_paths(
             conf.data.test_tif_dir, conf.data.test_gt_dir
         )
-        if val_from_test:
-            print("ATTN!! Using part of the test-set as validation")
-            nt = len(test_tiff_files)
-            np.random.seed(self.seed)
-            val_idx = np.random.choice(0, nt, size=nt // 3, replace=False)
-            val_tiff_files = [test_tiff_files[i] for i in val_idx]
-            val_marker_files = [test_marker_files[i] for i in val_idx]
-            for vtf, vmf in zip(val_tiff_files, val_marker_files):
-                test_tiff_files.remove(vtf)
-                test_marker_files.remove(vmf)
 
         ####################################
         ############ LOAD UNET #############
@@ -552,10 +541,10 @@ def parse_args():
         help="Skip UNet training and train only the DoG",
     )
     parser.add_argument(
-        "--val-from-test",
+        "--val-from-train",
         default=False,
         action="store_true",
-        help="part of the test-set as validation. UNet weights will be saved only when validation loss improves",
+        help="25% of the train-set will be used for validation. UNet weights will be saved only when validation loss improves and the blob detector will be trained on validation data.",
     )
     parser.add_argument(
         "--only-test",
@@ -571,9 +560,11 @@ def main():
 
     trainer = Trainer()
     if not args.only_test:
-        trainer.run(args.config, args.only_dog, args.val_from_test, args.lmdb, args.gpu)
+        trainer.run(
+            args.config, args.only_dog, args.val_from_train, args.lmdb, args.gpu
+        )
 
-    trainer.test(args.config, args.val_from_test, args.gpu)
+    trainer.test(args.config, args.gpu)
 
 
 if __name__ == "__main__":
