@@ -80,11 +80,11 @@ Experiment:
 UNet:
     model: "unet" # can be one of ['unet', 'res-unet', 'se-unet', 'eca-unet', 'attention-unet', 'moe-unet']
     input_shape: [80, 240, 240]
-    epochs: 4000
-    batch_size: 10
-    learning_rate: 0.001
+    epochs: 3000
+    batch_size: 4
+    learning_rate: 0.04
     n_blocks: 4
-    n_filters: 32
+    n_filters: 16
     k_size: !!python/tuple [3, 5, 5]
     k_stride: !!python/tuple [2, 2, 2]
     dropout: null
@@ -97,7 +97,7 @@ UNet:
     moe_balance_loss: "load" # only used if model == 'moe-unet'; can be 'load' or 'importance'
 
 DoG:
-    iterations: 40
+    iterations: 100
     max_match_dist: 10 # same scale as given by dim_resolution
     n_cpu: 5
 
@@ -110,7 +110,7 @@ PreProcessing:
     scale_value: 14
 
 DataAugmentation:
-    augment: false
+    augment: true
 
     gamma:
         param_range: [0.9, 1.1]
