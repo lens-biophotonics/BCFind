@@ -29,17 +29,17 @@ UNet:
     moe_balance_loss: "load" # only used if model == 'moe-unet'; can be 'load' or 'importance'
 
 DoG:
-    iterations: 40
+    iterations: 100
     max_match_dist: 10 # same scale as given by dim_resolution
     n_cpu: 5
 
 PreProcessing:
     clip: "bit" # can be one of ['constant', 'bit', 'quantile', 'auto', null]
-    clip_value: 15
+    clip_value: 14
     center: null # can be one of ['constant', 'min', 'mean', null]
     center_value: null
     scale: "bit" # can be one of ['constant', 'bit', 'max', 'std', null]
-    scale_value: 15
+    scale_value: 14
 
 DataAugmentation:
     augment: true
