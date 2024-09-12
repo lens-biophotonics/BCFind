@@ -1,4 +1,4 @@
-cupy-cuda11x[all]
+cupy-cuda12x[all]
 numba
 colorama
 lmdb

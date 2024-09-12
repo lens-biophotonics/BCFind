@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 AS base
+FROM nvidia/cuda:12.0.1-cudnn8-devel-ubuntu22.04 AS base
 
 RUN set -ex \
     && apt-get update \ 
@@ -24,9 +24,9 @@ COPY requirements.in /
 RUN set -ex \
     # Newest setuptools 59 is needed to install PIMS from ZetaStitcher
     && pip3 install --no-cache-dir -U setuptools pip \
-    && pip3 install --no-cache-dir pip-tools \
-    && pip-compile requirements.in \
-    && pip3 install --no-cache-dir -r requirements.txt \
+    # && pip3 install --no-cache-dir pip-tools \
+    # && pip-compile requirements.in \
+    && pip3 install --no-cache-dir -r requirements.in \
     && pip3 install --no-cache-dir zarr \
     && pip3 install --no-cache-dir git+https://github.com/lens-biophotonics/ZetaStitcher.git@devel \
     && rm -r requirements.*
