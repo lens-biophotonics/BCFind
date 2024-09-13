@@ -1,5 +1,6 @@
-cupy-cuda12x[all]
+cupy-cuda11x[all]
 numba
+numpy<2
 colorama
 lmdb
 matplotlib

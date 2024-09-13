@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.0.1-cudnn8-devel-ubuntu22.04 AS base
+FROM tensorflow/tensorflow:2.11.0-gpu
 
 RUN set -ex \
     && apt-get update \ 
@@ -8,33 +8,18 @@ RUN set -ex \
     libgl1 \
     libglib2.0-0 \
     libgomp1 \
-    ffmpeg
-
-RUN set -ex \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-    python3-pip \
-    python3-dev \
-    python3-wheel \
-    python3-setuptools \
+    ffmpeg \
     git \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-COPY requirements.in /
+COPY requirements-docker.txt /
 RUN set -ex \
-    # Newest setuptools 59 is needed to install PIMS from ZetaStitcher
-    && pip3 install --no-cache-dir -U setuptools pip \
-    # && pip3 install --no-cache-dir pip-tools \
-    # && pip-compile requirements.in \
-    && pip3 install --no-cache-dir -r requirements.in \
+    && pip3 install --no-cache-dir -r requirements-docker.txt \
     && pip3 install --no-cache-dir zarr \
-    && pip3 install --no-cache-dir git+https://github.com/lens-biophotonics/ZetaStitcher.git@devel \
-    && rm -r requirements.*
+    && pip3 install --no-cache-dir git+https://github.com/lens-biophotonics/ZetaStitcher.git@devel
 
 WORKDIR /home/
 
-# ENV LD_LIBRARY_PATH="/usr/local/cuda-11.2/compat:${LD_LIBRARY_PATH}"
-ENV PATH="/usr/local/cuda-11.2/bin:${PATH}"
 ENV CUPY_ACCELERATORS='cutensor'
 ENV CUPY_CUDA_PER_THREAD_DEFAULT_STREAM=1
 ENV CUPY_CACHE_DIR='/.cupy/kernel_cache'
