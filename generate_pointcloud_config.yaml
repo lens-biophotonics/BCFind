@@ -11,7 +11,7 @@ paths:
 
 # information regarding the acquistion
 acquistion:
-  # patches shape [Z, Y, X]
+  # patches shape to be processed [Z, Y, X]
   patch_shape: [120, 360, 360]
   # patches overlap region  [Z, Y, X]
   patch_overlap: [12, 36, 36]
