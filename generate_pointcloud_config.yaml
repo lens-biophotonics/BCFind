@@ -1,0 +1,45 @@
+# path to all the main dirs
+paths:
+  # path to UNet and DoG checkpoints
+  models: "/path/to/the/U-Net/and/DoG/models"
+  # path to the output dir
+  outdir: "output/path"
+  # path to acquisition stitch yml
+  stitch_yml: "/path/to/acquisition's/stitch.yml"
+  # path to acquisition mask
+  mask: "/path/to/acquisition's/mask.tiff"
+
+# information regarding the acquistion
+acquistion:
+  # patches shape [Z, Y, X]
+  patch_shape: [120, 360, 360]
+  # patches overlap region  [Z, Y, X]
+  patch_overlap: [12, 36, 36]
+  # resolution  [Z, Y, X]
+  dim_resolution: [2., .65, .65]
+  # preprocessing to apply over the patches
+  preprocessing: 
+    clip: "constant"  # can be one of ['constant', 'bit', 'quantile', 'auto', null]
+    clip_value: 16384
+    center: null  # can be one of ['constant', 'min', 'mean', null]
+    center_value: null
+    scale: "constant"  # can be one of ['constant', 'bit', 'max', 'std', null]
+    scale_value: 16384
+  
+
+# information regarding the size of the data structures
+data_structures_size:
+  # VFV LRU cache max item size
+  vfv_cache_size: 5000
+  # batch size (stores patches)
+  batch_size: 1
+  # queue size (stores batches)
+  queue_size: 6
+
+# configuration setting for the processing pipeline
+pipeline:
+  # to save the generated coordinates of all the patches for testing
+  save_patches_coordinates: True
+  # patches to process (from percentage, till percentage)
+  patches_progression_pcts: [40, 50]
+
