@@ -152,7 +152,7 @@ def main():
 
     end_time = time.time()
 
-    print(f"Neurons Detection Process Is Finised from {patches_progression_pcts[0]} till {patches_progression_pcts[1]}!\n\tTotal time: {(end_time-start_time)/60} hrs")
+    print(f"Neurons Detection Process Is Finised from {patches_progression_pcts[0]} till {patches_progression_pcts[1]}!\n\tTotal time: {(end_time-start_time)/360} hrs")
 
     # after the last progression has been processed
     if patches_progression_pcts[1] == 100:
